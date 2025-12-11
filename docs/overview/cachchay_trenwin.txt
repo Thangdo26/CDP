@@ -1,0 +1,15 @@
+cd cdp-platform
+
+# tạo / chọn virtualenv dùng chung cho cả repo
+python -m venv .venv
+cd cdp-platform
+- Tạo env
+python -m venv .venv
+-activate virtual env
+.\.venv\Scripts\activate
+- Cài thư viện chung
+(.venv) PS D:\workspace\python\cdp-platform> pip install -e .\src\libs\python\cdp_infra
+
+
+pip install pydantic-settings
+

@@ -1,0 +1,53 @@
+sequenceDiagram
+    autonumber
+    participant SDK as Client SDK<br/>(Web/App)
+    participant GW as API Gateway
+    participant ING as ingestion-service
+    participant INB as inbound-processor
+    participant KAFKA as Kafka
+    participant PROF as profile-service<br/>+ enrich-engine
+    participant SEG as segmentation-engine
+    participant CAMP as campaign-service<br/>+ delivery-service
+    participant CHAN as Channel Provider<br/>(Email/SMS/Push/Webhook)
+    participant TRK as tracking-service
+    participant ADMIN as Admin Portal
+
+    rect rgb(245,245,245)
+        Note over SDK,ING: Main data ingestion & profile update
+        SDK->>GW: /v1/events, /v1/users\n(with tenant/app auth)
+        GW->>ING: Forward validated HTTP request
+        ING->>KAFKA: Produce event to cdp.ingestion.raw
+        KAFKA-->>INB: Consume raw events
+        INB->>INB: Validate, map, identity resolution
+        INB->>KAFKA: Produce enriched events\ncdp.events.enriched
+        KAFKA-->>PROF: Consume enriched events
+        PROF->>PROF: Update profile traits / metrics
+        PROF->>ES: Index profile + events (async)
+    end
+
+    rect rgb(235,245,255)
+        Note over ADMIN,SEG: Segment definition & build
+        ADMIN->>SEG: Create/Update Segment Definition
+        SEG->>ES: Query profiles/events for rule
+        ES-->>SEG: Matching profile_ids
+        SEG->>MySQL: Upsert segment_members
+    end
+
+    rect rgb(245,235,255)
+        Note over ADMIN,CAMP: Campaign orchestration
+        ADMIN->>CAMP: Create campaign (+segment_id, schedule, channel)
+        CAMP->>SEG: Fetch segment_members or\nlisten cdp.segment.membership
+        SEG-->>CAMP: Profile target list
+        CAMP->>CAMP: Generate outbound messages
+        CAMP->>CHAN: Send batched requests\n(Email/SMS/Push/Webhook)
+    end
+
+    rect rgb(255,245,235)
+        Note over CHAN,TRK: Delivery & tracking feedback
+        CHAN-->>TRK: Webhook callbacks\n(sent/delivered/open/click/unsub/conv)
+        TRK->>KAFKA: Produce campaign events
+        KAFKA-->>ES: Index campaign_events_v1-*
+        KAFKA-->>PROF: Update engagement traits\n(open_count, last_click_at,…)
+        ADMIN->>ES: Read analytics dashboards
+        ES-->>ADMIN: Reports, funnels, cohorts
+    end
