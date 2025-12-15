@@ -33,7 +33,7 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable());
 
         http.authorizeHttpRequests(auth -> auth
-                .requestMatchers("/health", "/actuator/**").permitAll()
+                .requestMatchers("/health", "/actuator/**",  "/error").permitAll()
                 .anyRequest().authenticated()
         );
 
