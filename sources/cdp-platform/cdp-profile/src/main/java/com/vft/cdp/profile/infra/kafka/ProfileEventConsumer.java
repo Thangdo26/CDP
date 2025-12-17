@@ -1,6 +1,5 @@
 package com.vft.cdp.profile.infra.kafka;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vft.cdp.common.event.EnrichedEvent;
 import com.vft.cdp.profile.application.ProfileService;
 import lombok.RequiredArgsConstructor;
@@ -14,23 +13,28 @@ import org.springframework.stereotype.Component;
 public class ProfileEventConsumer {
 
     private final ProfileService profileService;
-    private final ObjectMapper objectMapper;
 
     @KafkaListener(
             topics = "${cdp.kafka.topics.events-enriched:cdp.events.enriched}",
             groupId = "${cdp.kafka.consumer.profile.group-id:cdp-profile}"
     )
-    public void consume(String message) {
+    public void consume(EnrichedEvent event) {  // ✅ EnrichedEvent, KHÔNG PHẢI String
+
+        log.info("=".repeat(60));
+        log.info("🎯 PROFILE CONSUMER STARTED");
+        log.info("TenantId: {}, ProfileId: {}, Event: {}",
+                event.getTenantId(),
+                event.getProfileId(),
+                event.getEventName());
+
         try {
-            EnrichedEvent event = objectMapper.readValue(message, EnrichedEvent.class);
-
-            log.debug("Received enriched event: tenant={}, profileId={}",
-                    event.getTenantId(), event.getProfileId());
-
             profileService.upsertProfileFromEvent(event);
+            log.info("✅ SUCCESS - Profile saved: {}", event.getProfileId());
 
         } catch (Exception ex) {
-            log.error("Failed to process event: {}", message, ex);
+            log.error("❌ ERROR - Failed to process event", ex);
         }
+
+        log.info("=".repeat(60));
     }
 }

@@ -18,8 +18,8 @@ public class ProfileController {
 
     @GetMapping("/{tenantId}/{profileId}")
     public ResponseEntity<ProfileResponse> getProfile(
-            @PathVariable String tenantId,
-            @PathVariable String profileId
+            @PathVariable("tenantId") String tenantId,
+            @PathVariable("profileId") String profileId
     ) {
         ProfileDto dto = profileService.getProfile(tenantId, profileId);
         return ResponseEntity.ok(ProfileResponse.fromDto(dto));
