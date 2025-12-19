@@ -25,7 +25,7 @@ public class EnrichedEvent {
     private String userId;
     private String anonymousId;
 
-    private OffsetDateTime eventTime;
+    private Instant eventTime;
     private Instant normalizedTime;
 
     private Map<String, Object> properties;

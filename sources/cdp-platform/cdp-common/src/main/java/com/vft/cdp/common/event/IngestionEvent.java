@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Map;
 
@@ -23,7 +24,7 @@ public class IngestionEvent {
     private String userId;        // external userId
     private String anonymousId;   // device id, cookie id, etc.
 
-    private OffsetDateTime eventTime;
+    private Instant eventTime;
 
     private Map<String, Object> properties;
     private Map<String, Object> traits;

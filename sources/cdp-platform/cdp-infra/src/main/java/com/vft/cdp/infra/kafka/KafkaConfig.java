@@ -37,7 +37,6 @@ public class KafkaConfig {
         Map<String, Object> config = new HashMap<>(kafkaProperties.buildProducerProperties());
         config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-        // Có thể thêm config JsonSerializer ở đây nếu cần
         return new DefaultKafkaProducerFactory<>(config);
     }
 
@@ -55,8 +54,11 @@ public class KafkaConfig {
         Map<String, Object> config = new HashMap<>(kafkaProperties.buildConsumerProperties());
         config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
-        // Tin tưởng các package chứa model event
-        config.put(JsonDeserializer.TRUSTED_PACKAGES, "com.vft.cdp.common.event");
+
+        // ✅ FIX: Thêm cả 2 packages: event và profile
+        config.put(JsonDeserializer.TRUSTED_PACKAGES,
+                "com.vft.cdp.common.event,com.vft.cdp.common.profile");
+
         return new DefaultKafkaConsumerFactory<>(config);
     }
 

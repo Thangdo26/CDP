@@ -1,47 +1,29 @@
 package com.vft.cdp.profile.api;
 
-import com.vft.cdp.profile.api.request.UpdateProfileTraitsRequest;
+import com.vft.cdp.common.profile.EnrichedProfile;
 import com.vft.cdp.profile.api.response.ProfileResponse;
 import com.vft.cdp.profile.application.ProfileService;
-import com.vft.cdp.profile.application.command.UpsertProfileFromEventCommand;
-import com.vft.cdp.profile.application.dto.ProfileDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Optional;
 
 @RestController
-@RequestMapping("/v1/profiles")
-@RequiredArgsConstructor
 public class ProfileController {
 
-    private final ProfileService profileService;
-
-    @GetMapping("/{tenantId}/{profileId}")
+    @GetMapping("/v1/profiles/{tenantId}/{userId}")
     public ResponseEntity<ProfileResponse> getProfile(
-            @PathVariable("tenantId") String tenantId,
-            @PathVariable("profileId") String profileId
-    ) {
-        ProfileDto dto = profileService.getProfile(tenantId, profileId);
-        return ResponseEntity.ok(ProfileResponse.fromDto(dto));
-    }
-
-    /**
-     * Ví dụ API manual upsert profile (không bắt buộc nếu chỉ nhận từ event).
-     */
-    @PutMapping("/{tenantId}/{profileId}")
-    public ResponseEntity<ProfileResponse> upsertProfile(
             @PathVariable String tenantId,
-            @PathVariable String profileId,
-            @RequestBody UpdateProfileTraitsRequest request
-    ) {
-        UpsertProfileFromEventCommand cmd = new UpsertProfileFromEventCommand(
-                tenantId,
-                profileId,
-                request.identifiers(),
-                request.traits()
-        );
+            @PathVariable String userId) {
 
-        ProfileDto dto = profileService.upsertProfile(cmd);
-        return ResponseEntity.ok(ProfileResponse.fromDto(dto));
+        Optional<EnrichedProfile> profileOpt = profileService.getProfile(tenantId, userId);
+
+        return profileOpt
+                .map(ProfileResponse::fromEnrichedProfile)  // Use mapper
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 }
