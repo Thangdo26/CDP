@@ -2,91 +2,153 @@ package com.vft.cdp.profile.infra.es;
 
 import lombok.Data;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.Document;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
+import org.springframework.data.elasticsearch.annotations.*;
 
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Map;
 
+/**
+ * Elasticsearch Document for Profile - NEW SCHEMA
+ * Mapping 1-1 với EnrichedProfile
+ */
 @Data
-@Document(indexName = "profiles_v1")
+//@Document(indexName = "profiles_v1")
+@Document(indexName = "profiles_thang_dev")
 public class ProfileDocument {
 
     @Id
-    private String id;  // tenantId|profileId
+    private  String id;
+
+    @Field(type = FieldType.Keyword, name = "profile_id")
+    private String profileId;  // Format: "{tenant_id}|{app_id}|{user_id}"
 
     @Field(type = FieldType.Keyword, name = "tenant_id")
     private String tenantId;
 
-    @Field(type = FieldType.Keyword, name = "profile_id")
-    private String profileId;
-
     @Field(type = FieldType.Keyword, name = "app_id")
-    private List<String> appId;
+    private String appId;
 
-    @Field(type = FieldType.Keyword, name = "status")
-    private String status;
+    @Field(type = FieldType.Keyword, name = "user_id")
+    private String userId;
 
-    @Field(type = FieldType.Boolean, name = "anonymous")
-    private Boolean anonymous;
+    @Field(type = FieldType.Keyword, name = "type")
+    private String type;
 
-    // Identities: nested object
-    @Field(type = FieldType.Object, name = "identities")
-    private Map<String, List<String>> identities;
-
-    // Traits: flexible fields
+    // ========== Nested Traits Object ==========
     @Field(type = FieldType.Object, name = "traits")
-    private Map<String, Object> traits;
+    private TraitsDocument traits;
 
-    // Segments
-    @Field(type = FieldType.Keyword, name = "segments")
-    private List<String> segments;
+    @Field(type = FieldType.Object, name = "platforms")
+    private PlatformsDocument platforms;
 
-    // Scores
-    @Field(type = FieldType.Object, name = "scores")
-    private Map<String, Double> scores;
+    @Field(type = FieldType.Object, name = "campaign")
+    private CampaignDocument campaign;
 
-    // Consents
-    @Field(type = FieldType.Object, name = "consents")
-    private Map<String, ConsentInfoDocument> consents;
-
-    // Metadata
     @Field(type = FieldType.Object, name = "metadata")
-    private ProfileMetadataDocument metadata;
+    private Map<String, Object> metadata;
+
+    // ========== System Metadata ==========
+    @Field(type = FieldType.Keyword, name = "partition_key")
+    private String partitionKey;
+
+    @Field(type = FieldType.Date, name = "enriched_at",
+            format = DateFormat.date_hour_minute_second_millis)
+    private Instant enrichedAt;
+
+    @Field(type = FieldType.Keyword, name = "enriched_id")
+    private String enrichedId;
+
+    // ========== Tracking Timestamps ==========
+    @Field(type = FieldType.Date, name = "created_at",
+            format = DateFormat.date_hour_minute_second_millis)
+    private Instant createdAt;
+
+    @Field(type = FieldType.Date, name = "updated_at",
+            format = DateFormat.date_hour_minute_second_millis)
+    private Instant updatedAt;
+
+    @Field(type = FieldType.Date, name = "first_seen_at",
+            format = DateFormat.date_hour_minute_second_millis)
+    private Instant firstSeenAt;
+
+    @Field(type = FieldType.Date, name = "last_seen_at",
+            format = DateFormat.date_hour_minute_second_millis)
+    private Instant lastSeenAt;
+
+    @Field(type = FieldType.Integer, name = "version")
+    private Integer version;
+
+    // ========== Inner Documents ==========
 
     @Data
-    public static class ConsentInfoDocument {
-        @Field(type = FieldType.Keyword)
-        private String status;
+    public static class TraitsDocument {
+        @Field(type = FieldType.Text, name = "full_name")
+        private String fullName;
 
-        @Field(type = FieldType.Date, name = "updated_at")
-        private OffsetDateTime updatedAt;
+        @Field(type = FieldType.Keyword, name = "first_name")
+        private String firstName;
 
-        @Field(type = FieldType.Keyword)
-        private String source;
+        @Field(type = FieldType.Keyword, name = "last_name")
+        private String lastName;
+
+        @Field(type = FieldType.Keyword, name = "idcard")
+        private String idcard;
+
+        @Field(type = FieldType.Keyword, name = "old_idcard")
+        private String oldIdcard;
+
+        @Field(type = FieldType.Keyword, name = "phone")
+        private String phone;
+
+        @Field(type = FieldType.Keyword, name = "email")
+        private String email;
+
+        @Field(type = FieldType.Keyword, name = "gender")
+        private String gender;
+
+        @Field(type = FieldType.Keyword, name = "dob")
+        private String dob;
+
+        @Field(type = FieldType.Text, name = "address")
+        private String address;
+
+        @Field(type = FieldType.Keyword, name = "religion")
+        private String religion;
     }
 
     @Data
-    public static class ProfileMetadataDocument {
-        @Field(type = FieldType.Date, name = "created_at")
-        private OffsetDateTime createdAt;
+    public static class PlatformsDocument {
+        @Field(type = FieldType.Keyword)
+        private String os;
 
-        @Field(type = FieldType.Date, name = "updated_at")
-        private OffsetDateTime updatedAt;
+        @Field(type = FieldType.Keyword)
+        private String device;
 
-        @Field(type = FieldType.Date, name = "first_seen_at")
-        private OffsetDateTime firstSeenAt;
+        @Field(type = FieldType.Keyword)
+        private String browser;
 
-        @Field(type = FieldType.Date, name = "last_seen_at")
-        private OffsetDateTime lastSeenAt;
+        @Field(type = FieldType.Keyword, name = "app_version")
+        private String appVersion;
+    }
 
-        @Field(type = FieldType.Keyword, name = "source_systems")
-        private List<String> sourceSystems;
+    @Data
+    public static class CampaignDocument {
+        @Field(type = FieldType.Keyword, name = "utm_source")
+        private String utmSource;
 
-        @Field(type = FieldType.Integer)
-        private Integer version;
+        @Field(type = FieldType.Keyword, name = "utm_campaign")
+        private String utmCampaign;
+
+        @Field(type = FieldType.Keyword, name = "utm_medium")
+        private String utmMedium;
+
+        @Field(type = FieldType.Keyword, name = "utm_content")
+        private String utmContent;
+
+        @Field(type = FieldType.Keyword, name = "utm_term")
+        private String utmTerm;
+
+        @Field(type = FieldType.Keyword, name = "utm_custom")
+        private String utmCustom;
     }
 }

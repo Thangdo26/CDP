@@ -8,12 +8,11 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;  // ← ĐỔI IMPORT
 import java.util.Map;
 
 /**
- * Profile response DTO for API
- * Contains profile data without internal enrichment metadata
+ * Profile response DTO - FIXED TIMESTAMPS
  */
 @Data
 @NoArgsConstructor
@@ -22,7 +21,6 @@ import java.util.Map;
 public class ProfileResponse {
 
     // ========== Identity Fields ==========
-
     @JsonProperty("user_id")
     private String userId;
 
@@ -33,7 +31,6 @@ public class ProfileResponse {
     private String appId;
 
     // ========== Profile Data ==========
-
     private String type;
 
     private TraitsResponse traits;
@@ -45,26 +42,22 @@ public class ProfileResponse {
     private Map<String, Object> metadata;
 
     // ========== Tracking Metadata ==========
-
+    // ✅ ĐỔI TỪ OffsetDateTime → Instant
     @JsonProperty("created_at")
-    private OffsetDateTime createdAt;
+    private Instant createdAt;
 
     @JsonProperty("updated_at")
-    private OffsetDateTime updatedAt;
+    private Instant updatedAt;
 
     @JsonProperty("first_seen_at")
-    private OffsetDateTime firstSeenAt;
+    private Instant firstSeenAt;
 
     @JsonProperty("last_seen_at")
-    private OffsetDateTime lastSeenAt;
+    private Instant lastSeenAt;
 
     private Integer version;
 
-    // ========== Static Mapper ==========
-
-    /**
-     * Create ProfileResponse from EnrichedProfile
-     */
+    // ========== Static Mapper (giữ nguyên logic) ==========
     public static ProfileResponse fromEnrichedProfile(EnrichedProfile profile) {
         if (profile == null) {
             return null;
@@ -87,8 +80,7 @@ public class ProfileResponse {
                 .build();
     }
 
-    // ========== Private Mappers ==========
-
+    // Private mappers (giữ nguyên - không đổi)
     private static TraitsResponse mapTraits(RawProfile.Traits traits) {
         if (traits == null) {
             return null;
@@ -137,7 +129,7 @@ public class ProfileResponse {
                 .build();
     }
 
-    // ========== Inner Response Classes ==========
+    // ========== Inner Response Classes (giữ nguyên) ==========
 
     @Data
     @NoArgsConstructor

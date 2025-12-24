@@ -37,13 +37,13 @@ public class SearchProfileRequest {
      * User ID (exact match)
      */
     @JsonProperty("user_id")
-    private String userId;  // Changed from profile_id
+    private String userId;
 
     /**
      * App ID (exact match)
      */
     @JsonProperty("app_id")
-    private String appId;  // Changed from List<String> to String
+    private String appId;
 
     /**
      * Request type (e.g., registration, profile_update)

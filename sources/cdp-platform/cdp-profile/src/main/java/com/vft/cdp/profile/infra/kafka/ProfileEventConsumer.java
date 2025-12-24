@@ -20,20 +20,12 @@ public class ProfileEventConsumer {
     )
     public void consume(EnrichedProfile profile) {
 
-        log.info("=".repeat(60));
-        log.info("🎯 PROFILE CONSUMER STARTED");
-        log.info("TenantId: {}, UserId: {}",
-                profile.getTenantId(),
-                profile.getUserId());
-
         try {
             profileService.saveEnrichedProfile(profile);
-            log.info("✅ SUCCESS - Profile saved: {}", profile.getUserId());
+            log.info("[ProfileConsumer]✅ SUCCESS - Profile saved successfully to ElasticSearch: {}", profile.getUserId());
 
         } catch (Exception ex) {
             log.error("❌ ERROR - Failed to process profile", ex);
         }
-
-        log.info("=".repeat(60));
     }
 }

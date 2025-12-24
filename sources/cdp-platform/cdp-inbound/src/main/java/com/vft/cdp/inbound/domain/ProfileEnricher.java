@@ -5,21 +5,21 @@ import com.vft.cdp.common.profile.RawProfile;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 
+/**
+ * Profile Enricher - FIXED TIMESTAMPS
+ */
 @Component
 public class ProfileEnricher {
 
     public EnrichedProfile enrich(RawProfile raw) {
 
         String partitionKey = raw.getTenantId() + "|" + raw.getUserId();
-        Instant now = Instant.now();
-        OffsetDateTime nowOffset = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
+        Instant now = Instant.now();  // ✅ Dùng Instant thay vì OffsetDateTime
 
         return EnrichedProfile.builder()
-                // From raw profile
+                // From raw
                 .tenantId(raw.getTenantId())
                 .appId(raw.getAppId())
                 .type(raw.getType())
@@ -29,16 +29,16 @@ public class ProfileEnricher {
                 .campaign(raw.getCampaign())
                 .metadata(raw.getMetadata())
 
-                // Enrichment metadata
+                // System metadata
                 .partitionKey(partitionKey)
                 .enrichedAt(now)
                 .enrichedId(UUID.randomUUID().toString())
 
-                // Tracking timestamps
-                .createdAt(nowOffset)
-                .updatedAt(nowOffset)
-                .firstSeenAt(nowOffset)
-                .lastSeenAt(nowOffset)
+                // Timestamps - tất cả dùng Instant
+                .createdAt(now)
+                .updatedAt(now)
+                .firstSeenAt(now)
+                .lastSeenAt(now)
                 .version(1)
 
                 .build();

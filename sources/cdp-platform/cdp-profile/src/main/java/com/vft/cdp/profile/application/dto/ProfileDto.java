@@ -7,45 +7,35 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.Instant;
-import java.time.OffsetDateTime;
+import java.time.Instant;  // ← ĐỔI IMPORT
 import java.util.Map;
 
-/**
- * Profile DTO for application layer
- * Matches new profile schema structure
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class ProfileDto {
 
-    // ========== Identity Fields ==========
-
     @JsonProperty("user_id")
-    private String userId;  // Changed from profile_id
+    private String userId;
 
     @JsonProperty("tenant_id")
     private String tenantId;
 
     @JsonProperty("app_id")
-    private String appId;  // Changed from List<String> to String
+    private String appId;
 
-    // ========== Profile Data Fields ==========
+    private String type;
 
-    private String type;  // Request type (e.g., registration, profile_update)
+    private RawProfile.Traits traits;
 
-    private RawProfile.Traits traits;  // Structured traits object
+    private RawProfile.Platforms platforms;
 
-    private RawProfile.Platforms platforms;  // Device/platform information
+    private RawProfile.Campaign campaign;
 
-    private RawProfile.Campaign campaign;  // UTM/campaign parameters
+    private Map<String, Object> metadata;
 
-    private Map<String, Object> metadata;  // Additional metadata (scores, tags, etc.)
-
-    // ========== System Metadata (Optional for response) ==========
-
+    // System metadata
     @JsonProperty("partition_key")
     private String partitionKey;
 
@@ -55,17 +45,18 @@ public class ProfileDto {
     @JsonProperty("enriched_id")
     private String enrichedId;
 
+    // ✅ ĐỔI TỪ OffsetDateTime → Instant
     @JsonProperty("created_at")
-    private OffsetDateTime createdAt;
+    private Instant createdAt;
 
     @JsonProperty("updated_at")
-    private OffsetDateTime updatedAt;
+    private Instant updatedAt;
 
     @JsonProperty("first_seen_at")
-    private OffsetDateTime firstSeenAt;
+    private Instant firstSeenAt;
 
     @JsonProperty("last_seen_at")
-    private OffsetDateTime lastSeenAt;
+    private Instant lastSeenAt;
 
     private Integer version;
 }

@@ -7,6 +7,7 @@ import com.vft.cdp.inbound.domain.EventEnricher;
 import com.vft.cdp.inbound.domain.EventValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -17,7 +18,8 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class InboundProcessor {
 
-    private static final String ENRICHED_TOPIC = "cdp.events.enriched";
+    @Value("${cdp.kafka.topics.ingestion-raw}")
+    private String enrichedTopicIngestionRaw;
 
     private final EventValidator validator;
     private final EventEnricher enricher;
@@ -45,13 +47,13 @@ public class InboundProcessor {
 
             // 3. Push sang topic enriched
             String key = enriched.getPartitionKey();
-            kafkaTemplate.send(ENRICHED_TOPIC, key, enriched)
+            kafkaTemplate.send(enrichedTopicIngestionRaw, key, enriched)
                     .whenComplete((result, ex) -> {
                         if (ex != null) {
                             log.error("[inbound] Failed to publish EnrichedEvent, key={}", key, ex);
                         } else if (log.isDebugEnabled()) {
                             log.debug("[inbound] Published EnrichedEvent to {}, key={}, offset={}",
-                                    ENRICHED_TOPIC,
+                                    enrichedTopicIngestionRaw,
                                     key,
                                     result.getRecordMetadata().offset());
                         }

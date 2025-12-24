@@ -7,12 +7,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.util.Map;
 
 /**
- * Enriched profile after validation and enrichment
- * Contains all RawProfile data plus enrichment metadata
+ * Enriched profile - NEW SCHEMA (khớp với RawProfile)
+ * Đây là profile sau khi đã qua validation và enrichment
  */
 @Data
 @NoArgsConstructor
@@ -21,7 +20,6 @@ import java.util.Map;
 public class EnrichedProfile {
 
     // ========== From Auth Context ==========
-
     @JsonProperty("tenant_id")
     private String tenantId;
 
@@ -29,44 +27,41 @@ public class EnrichedProfile {
     private String appId;
 
     // ========== From Request Body ==========
-
     private String type;
 
     @JsonProperty("user_id")
-    private String userId;
+    private String userId;  // ← Đổi từ profileId thành userId
 
-    private RawProfile.Traits traits;
+    private RawProfile.Traits traits;  // ← Structured traits
 
     private RawProfile.Platforms platforms;
 
     private RawProfile.Campaign campaign;
 
-    private Map<String, Object> metadata;  // Contains scores, etc.
+    private Map<String, Object> metadata;
 
-    // ========== Enrichment Metadata (Added by system) ==========
-
+    // ========== Enrichment Metadata (System adds) ==========
     @JsonProperty("partition_key")
-    private String partitionKey;  // Format: "{tenant_id}|{user_id}"
+    private String partitionKey;
 
     @JsonProperty("enriched_at")
-    private Instant enrichedAt;  // When profile was enriched
+    private Instant enrichedAt;
 
     @JsonProperty("enriched_id")
-    private String enrichedId;  // Unique enrichment ID
+    private String enrichedId;
 
-    // ========== Tracking Metadata (System-managed) ==========
-
+    // ========== Tracking Metadata ==========
     @JsonProperty("created_at")
-    private OffsetDateTime createdAt;  // First time profile was created
+    private Instant createdAt;
 
     @JsonProperty("updated_at")
-    private OffsetDateTime updatedAt;  // Last update time
+    private Instant updatedAt;
 
     @JsonProperty("first_seen_at")
-    private OffsetDateTime firstSeenAt;  // First time user was seen
+    private Instant firstSeenAt;
 
     @JsonProperty("last_seen_at")
-    private OffsetDateTime lastSeenAt;  // Last time user was seen
+    private Instant lastSeenAt;
 
-    private Integer version;  // Profile version for optimistic locking
+    private Integer version;
 }

@@ -45,10 +45,16 @@ public class ProfileInboundProcessor {
             kafkaTemplate.send(ENRICHED_TOPIC, key, enriched)
                     .whenComplete((result, ex) -> {
                         if (ex != null) {
-                            log.error("[profile-inbound] ❌ Failed to publish, key={}", key, ex);
+                            log.error(
+                                    "[profile-inbound] ❌ Failed to publish EnrichedProfile | topic={} | key={}",
+                                    ENRICHED_TOPIC,
+                                    key,
+                                    ex
+                            );
                         } else {
-                            log.info("[profile-inbound] ✅ Published EnrichedProfile to {}, key={}, offset={}",
-                                    ENRICHED_TOPIC, key, result.getRecordMetadata().offset());
+                            log.info(
+                                    "[profile-inbound] ✅ Published EnrichedProfile successfully"
+                            );
                         }
                     });
 
