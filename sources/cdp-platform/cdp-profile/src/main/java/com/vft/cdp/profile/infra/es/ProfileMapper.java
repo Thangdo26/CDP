@@ -1,7 +1,7 @@
 package com.vft.cdp.profile.infra.es;
 
-import com.vft.cdp.common.profile.EnrichedProfile;
-import com.vft.cdp.common.profile.RawProfile;
+import com.vft.cdp.profile.domain.model.EnrichedProfile;
+import com.vft.cdp.profile.domain.model.RawProfile;
 
 /**
  * Mapper giữa EnrichedProfile (domain) và ProfileDocument (Elasticsearch)

@@ -1,9 +1,10 @@
 package com.vft.cdp.profile.application;
 
-import com.vft.cdp.common.profile.EnrichedProfile;
-import com.vft.cdp.common.profile.RawProfile;
+import com.vft.cdp.profile.domain.model.EnrichedProfile;
+import com.vft.cdp.profile.domain.model.RawProfile;
 import com.vft.cdp.profile.api.request.SearchProfileRequest;
 import com.vft.cdp.profile.domain.repository.ProfileRepository;
+import com.vft.cdp.profile.infra.cache.ProfileCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -24,10 +25,18 @@ import java.util.*;
 public class ProfileService {
 
     private final ProfileRepository profileRepository;
+    private  final ProfileCacheService cacheService;
 
-    /**
-     * Search profiles by criteria
+    /*
+     * Get profile - WITH CACHING
+     *
+     * FLOW:
+     * 1. Check cache (L1 + L2)
+     * 2. If miss: Query ES
+     * 3. Populate cache
+     * 4. Return
      */
+
     public Page<EnrichedProfile> searchProfiles(SearchProfileRequest request) {
         return profileRepository.search(request);
     }
@@ -36,7 +45,24 @@ public class ProfileService {
      * Get profile by tenant and user ID
      */
     public Optional<EnrichedProfile> getProfile(String tenantId, String appId, String userId) {
-        return profileRepository.find(tenantId, appId, userId);
+
+        // 1. Try cache first
+        Optional<EnrichedProfile> cached = cacheService.get(tenantId, appId, userId);
+        if (cached.isPresent()) {
+            return cached;
+        }
+
+        // 2. Cache miss - query ES
+        log.debug("🔍 Querying ES for profile: {}|{}|{}", tenantId, appId, userId);
+        Optional<EnrichedProfile> profile = profileRepository.find(tenantId, appId, userId);
+
+        // 3. Populate cache if found
+        profile.ifPresent(p -> {
+            cacheService.put(tenantId, appId, userId, p);
+            log.debug("📝 Profile cached: {}|{}|{}", tenantId, appId, userId);
+        });
+
+        return profile;
     }
 
     /**
@@ -71,6 +97,10 @@ public class ProfileService {
 
         // 2. Save to ES
         profileRepository.save(profileToSave);
+
+        // ✅ POPULATE CACHE after save (write-through)
+        cacheService.put(tenantId, appId, userId, profileToSave);
+        log.debug("📝 Profile saved and cached: {}|{}|{}", tenantId, appId, userId);
     }
 
     /**
@@ -194,6 +224,10 @@ public class ProfileService {
 
         // 3. Save to ES
         EnrichedProfile saved = profileRepository.save(updated);
+
+        // ✅ INVALIDATE CACHE after update
+        cacheService.evict(tenantId, appId, userId);
+        log.info("🗑️  Cache invalidated after update: {}|{}|{}", tenantId, appId, userId);
 
         return saved;
     }
@@ -403,11 +437,11 @@ public class ProfileService {
         // 1. Delete from repository
         profileRepository.delete(tenantId, appId, userId);
 
-        String profileId = tenantId + "|" + appId + "|" + userId;
+        // ✅ INVALIDATE CACHE after delete
+        cacheService.evict(tenantId, appId, userId);
+        log.info("🗑️  Cache invalidated after delete: {}|{}|{}", tenantId, appId, userId);
 
-        log.info("✅ Profile deleted successfully: {}", profileId);
-
-        return profileId;
+        return tenantId + "|" + appId + "|" + userId;
     }
 
 }
