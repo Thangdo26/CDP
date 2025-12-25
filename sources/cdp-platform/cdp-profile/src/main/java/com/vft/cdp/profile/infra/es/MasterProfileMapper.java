@@ -1,7 +1,7 @@
 package com.vft.cdp.profile.infra.es;
 
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
-import com.vft.cdp.profile.domain.model.MasterProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
+import com.vft.cdp.common.profile.MasterProfile;
 
 import java.time.Instant;
 import java.util.*;

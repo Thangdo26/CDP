@@ -3,7 +3,7 @@ package com.vft.cdp.profile.application.merge;
 
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
 import com.vft.cdp.profile.infra.es.ProfileDocument;
 import com.vft.cdp.profile.infra.es.ProfileMapper;
 import lombok.RequiredArgsConstructor;

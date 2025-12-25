@@ -1,7 +1,7 @@
 package com.vft.cdp.profile.infra.es;
 
 import co.elastic.clients.elasticsearch._types.query_dsl.*;
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
 import com.vft.cdp.profile.api.request.SearchProfileRequest;
 import com.vft.cdp.profile.domain.repository.ProfileRepository;
 import lombok.RequiredArgsConstructor;

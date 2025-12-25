@@ -1,7 +1,7 @@
 package com.vft.cdp.profile.api;
 
 import com.vft.cdp.auth.domain.ApiKeyAuthContext;
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
 import com.vft.cdp.profile.api.request.SearchProfileRequest;
 import com.vft.cdp.profile.api.request.UpdateProfileRequest;
 import com.vft.cdp.profile.api.response.DeleteProfileResponse;

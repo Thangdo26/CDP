@@ -1,8 +1,8 @@
 package com.vft.cdp.profile.application.merge;
 
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
 import com.vft.cdp.profile.api.response.AutoMergeResponse;
-import com.vft.cdp.profile.domain.model.MasterProfile;
+import com.vft.cdp.common.profile.MasterProfile;
 import com.vft.cdp.profile.infra.es.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -1,8 +1,8 @@
 package com.vft.cdp.profile.application;
 
 import com.vft.cdp.common.exception.EventValidationException;
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
-import com.vft.cdp.profile.domain.model.RawProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
+import com.vft.cdp.common.profile.RawProfile;
 import com.vft.cdp.profile.domain.ProfileEnricher;
 import com.vft.cdp.profile.domain.ProfileValidator;
 import lombok.RequiredArgsConstructor;

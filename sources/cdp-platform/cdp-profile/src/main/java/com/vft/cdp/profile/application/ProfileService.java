@@ -1,7 +1,7 @@
 package com.vft.cdp.profile.application;
 
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
-import com.vft.cdp.profile.domain.model.RawProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
+import com.vft.cdp.common.profile.RawProfile;
 import com.vft.cdp.profile.api.request.SearchProfileRequest;
 import com.vft.cdp.profile.domain.repository.ProfileRepository;
 import com.vft.cdp.profile.infra.cache.ProfileCacheService;
@@ -87,7 +87,6 @@ public class ProfileService {
             EnrichedProfile existing = existingOpt.get();
             profileToSave = mergeProfiles(existing, enrichedProfile);
 
-            log.info("🔄 MERGE - Updated existing profile");
         } else {
             // NEW → CREATE
             profileToSave = enrichedProfile;

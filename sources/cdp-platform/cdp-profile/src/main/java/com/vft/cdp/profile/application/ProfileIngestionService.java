@@ -1,7 +1,7 @@
 package com.vft.cdp.profile.application;
 
 import com.vft.cdp.auth.domain.ApiKeyAuthContext;
-import com.vft.cdp.profile.domain.model.RawProfile;
+import com.vft.cdp.common.profile.RawProfile;
 import com.vft.cdp.profile.api.request.ProfileIngestionRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

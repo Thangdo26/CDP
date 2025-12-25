@@ -1,8 +1,8 @@
 package com.vft.cdp.profile.api.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
-import com.vft.cdp.profile.domain.model.RawProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
+import com.vft.cdp.common.profile.RawProfile;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

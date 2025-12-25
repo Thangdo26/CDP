@@ -1,6 +1,6 @@
 package com.vft.cdp.profile.domain.repository;
 
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
 import com.vft.cdp.profile.api.request.SearchProfileRequest;
 import org.springframework.data.domain.Page;
 

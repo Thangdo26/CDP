@@ -1,7 +1,7 @@
 package com.vft.cdp.profile.domain;
 
-import com.vft.cdp.profile.domain.model.EnrichedProfile;
-import com.vft.cdp.profile.domain.model.RawProfile;
+import com.vft.cdp.common.profile.EnrichedProfile;
+import com.vft.cdp.common.profile.RawProfile;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;

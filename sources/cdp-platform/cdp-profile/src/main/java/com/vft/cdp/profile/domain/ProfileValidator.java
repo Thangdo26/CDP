@@ -1,7 +1,7 @@
 package com.vft.cdp.profile.domain;
 
 import com.vft.cdp.common.exception.EventValidationException;
-import com.vft.cdp.profile.domain.model.RawProfile;
+import com.vft.cdp.common.profile.RawProfile;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 

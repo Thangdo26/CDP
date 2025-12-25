@@ -62,7 +62,7 @@ public class ProfileCacheConfig {
                 .maximumSize(10_000)
 
                 // Time-based eviction
-                .expireAfterWrite(5, TimeUnit.MINUTES)
+                .expireAfterWrite(15, TimeUnit.MINUTES)
 
                 // Stats for monitoring
                 .recordStats()
@@ -95,7 +95,7 @@ public class ProfileCacheConfig {
         // JSON serialization config
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration
                 .defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(15))  // 15 min TTL
+                .entryTtl(Duration.ofMinutes(20))  // 20 min TTL
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair.fromSerializer(
                                 new StringRedisSerializer()
