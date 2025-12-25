@@ -226,8 +226,6 @@ public class ProfileService {
 
         // ✅ INVALIDATE CACHE after update
         cacheService.evict(tenantId, appId, userId);
-        log.info("🗑️  Cache invalidated after update: {}|{}|{}", tenantId, appId, userId);
-
         return saved;
     }
 

@@ -1,0 +1,278 @@
+{
+    "info": {
+      "name": "CDP Profile Merge",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    },
+    "item": [
+      {
+        "name": "Setup - Create Test Profiles",
+        "item": [
+          {
+            "name": "1. Create Profile - iOS App Registration",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profiles",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"type\": \"app_registration\",\n  \"traits\": {\n    \"phone\": \"0987654321\",\n    \"email\": \"nguyenvanb@gmail.com\",\n    \"full_name\": \"Nguyễn Văn B\",\n    \"first_name\": \"Văn B\",\n    \"last_name\": \"Nguyễn\",\n    \"gender\": \"male\",\n    \"dob\": \"1995-03-20\"\n  },\n  \"platforms\": {\n    \"os\": \"iOS\",\n    \"device\": \"iPhone 14 Pro\",\n    \"browser\": \"Safari\",\n    \"app_version\": \"2.0.1\"\n  },\n  \"campaign\": {\n    \"utm_source\": \"facebook\",\n    \"utm_campaign\": \"spring_sale_2024\",\n    \"utm_medium\": \"social\"\n  }\n}"
+              }
+            }
+          },
+          {
+            "name": "2. Create Profile - Web Registration",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profiles",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"type\": \"web_registration\",\n  \"traits\": {\n    \"phone\": \"0987654321\",\n    \"email\": \"vanb.nguyen@yahoo.com\",\n    \"full_name\": \"Nguyen Van B\",\n    \"gender\": \"male\",\n    \"dob\": \"1995-03-20\",\n    \"address\": \"456 Đường Láng, Đống Đa, Hà Nội\"\n  },\n  \"platforms\": {\n    \"os\": \"Windows\",\n    \"device\": \"Desktop\",\n    \"browser\": \"Chrome\",\n    \"app_version\": \"1.5.0\"\n  }\n}"
+              }
+            }
+          },
+          {
+            "name": "3. Create Profile - eKYC Update",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profiles",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"type\": \"ekyc_update\",\n  \"traits\": {\n    \"phone\": \"0987654321\",\n    \"idcard\": \"035195012345\",\n    \"full_name\": \"NGUYEN VAN B\",\n    \"dob\": \"20/03/1995\",\n    \"address\": \"456 Duong Lang, Dong Da, Ha Noi\"\n  },\n  \"metadata\": {\n    \"kyc_level\": \"FULL\",\n    \"kyc_verified_at\": \"2024-12-25T10:00:00Z\"\n  }\n}"
+              }
+            }
+          },
+          {
+            "name": "4. Create Profile - Purchase Event",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profiles",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"type\": \"purchase\",\n  \"traits\": {\n    \"email\": \"nguyenvanb@gmail.com\",\n    \"phone\": \"0987-654-321\"\n  },\n  \"metadata\": {\n    \"order_id\": \"ORD-2024-12345\",\n    \"order_value\": 1500000,\n    \"payment_method\": \"credit_card\"\n  },\n  \"campaign\": {\n    \"utm_source\": \"google\",\n    \"utm_campaign\": \"winter_sale_2024\",\n    \"utm_medium\": \"cpc\"\n  }\n}"
+              }
+            }
+          },
+          {
+            "name": "5. Create Profile - Support Ticket",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profiles",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"type\": \"support_ticket\",\n  \"traits\": {\n    \"phone\": \"0987654321\",\n    \"email\": \"nguyenvanb@gmail.com\",\n    \"full_name\": \"Nguyễn B\"\n  },\n  \"metadata\": {\n    \"ticket_id\": \"TICKET-5678\",\n    \"issue_type\": \"payment_issue\",\n    \"priority\": \"high\"\n  }\n}"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Auto Merge Tests",
+        "item": [
+          {
+            "name": "Auto Merge - Dry Run (Preview Only)",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profile/merge_auto",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"strategies\": [\"idcard_only\", \"phone_dob\", \"email_name\", \"phone_name\"],\n  \"confidence_threshold\": 0.8,\n  \"dry_run\": true\n}"
+              }
+            }
+          },
+          {
+            "name": "Auto Merge - ID Card Only (Strictest)",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profile/merge_auto",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"strategies\": [\"idcard_only\"],\n  \"confidence_threshold\": 1.0,\n  \"dry_run\": false\n}"
+              }
+            }
+          },
+          {
+            "name": "Auto Merge - Phone + DOB (Common)",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profile/merge_auto",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"strategies\": [\"phone_dob\"],\n  \"confidence_threshold\": 0.9,\n  \"dry_run\": false\n}"
+              }
+            }
+          },
+          {
+            "name": "Auto Merge - Email + Name",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profile/merge_auto",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"strategies\": [\"email_name\"],\n  \"confidence_threshold\": 0.8,\n  \"dry_run\": false\n}"
+              }
+            }
+          },
+          {
+            "name": "Auto Merge - Phone + Name (Loosest)",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profile/merge_auto",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"strategies\": [\"phone_name\"],\n  \"confidence_threshold\": 0.7,\n  \"dry_run\": false\n}"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Manual Merge Tests",
+        "item": [
+          {
+            "name": "Manual Merge - 2 Profiles (Delete Originals)",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profile/merge_manual",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"source_profile_ids\": [\n    \"tenant_VC|app_VTMN|nguyenvanb_001\",\n    \"tenant_VC|app_VTMN|nguyenvanb_002\"\n  ],\n  \"merge_strategy\": \"merge_all\",\n  \"keep_originals\": false\n}"
+              }
+            }
+          },
+          {
+            "name": "Manual Merge - 3 Profiles (Keep Originals)",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profile/merge_manual",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"source_profile_ids\": [\n    \"tenant_VC|app_VTMN|nguyenvanb_003\",\n    \"tenant_VC|app_VTMN|nguyenvanb_004\",\n    \"tenant_VC|app_VTMN|nguyenvanb_005\"\n  ],\n  \"merge_strategy\": \"keep_latest\",\n  \"keep_originals\": true\n}"
+              }
+            }
+          },
+          {
+            "name": "Manual Merge - All 5 Profiles (Force Merge)",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profile/merge_manual",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"source_profile_ids\": [\n    \"tenant_VC|app_VTMN|nguyenvanb_001\",\n    \"tenant_VC|app_VTMN|nguyenvanb_002\",\n    \"tenant_VC|app_VTMN|nguyenvanb_003\",\n    \"tenant_VC|app_VTMN|nguyenvanb_004\",\n    \"tenant_VC|app_VTMN|nguyenvanb_005\"\n  ],\n  \"merge_strategy\": \"merge_all\",\n  \"keep_originals\": false,\n  \"master_profile_id\": \"tenant_VC|app_VTMN|nguyenvanb_001\"\n}"
+              }
+            }
+          },
+          {
+            "name": "Manual Merge - Keep First Strategy",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profile/merge_manual",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"source_profile_ids\": [\n    \"tenant_VC|app_VTMN|nguyenvanb_001\",\n    \"tenant_VC|app_VTMN|nguyenvanb_002\"\n  ],\n  \"merge_strategy\": \"keep_first\",\n  \"keep_originals\": false\n}"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Verification Tests",
+        "item": [
+          {
+            "name": "Get Master Profile",
+            "request": {
+              "method": "GET",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"}
+              ],
+              "url": "http://localhost:8080/v1/profile/master/{master_profile_id}"
+            }
+          },
+          {
+            "name": "Search Merged Profiles",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type", "value": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profiles/search",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"type\": \"merged_profile\"\n}"
+              }
+            }
+          },
+          {
+            "name": "Search by Phone (Should Find Master)",
+            "request": {
+              "method": "POST",
+              "header": [
+                {"key": "X-API-Key", "value": "cdp_test123_secret"},
+                {"key": "Content-Type": "application/json"}
+              ],
+              "url": "http://localhost:8080/v1/profiles/search",
+              "body": {
+                "mode": "raw",
+                "raw": "{\n  \"tenant_id\": \"tenant_VC\",\n  \"traits\": {\n    \"phone\": \"0987654321\"\n  }\n}"
+              }
+            }
+          }
+        ]
+      }
+    ]
+}

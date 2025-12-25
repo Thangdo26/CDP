@@ -25,7 +25,7 @@ import java.time.Instant;
  */
 @Slf4j
 @RestController
-@RequestMapping("/v1/profile")
+@RequestMapping("/v1/profiles")
 @RequiredArgsConstructor
 public class ProfileMergeController {
 

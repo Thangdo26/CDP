@@ -7,12 +7,7 @@ import org.springframework.data.elasticsearch.annotations.*;
 import java.time.Instant;
 import java.util.Map;
 
-/**
- * Elasticsearch Document for Profile - NEW SCHEMA
- * Mapping 1-1 với EnrichedProfile
- */
 @Data
-//@Document(indexName = "profiles_v1")
 @Document(indexName = "profiles_thang_dev")
 public class ProfileDocument {
 
@@ -100,14 +95,14 @@ public class ProfileDocument {
         @Field(type = FieldType.Keyword, name = "phone")
         private String phone;
 
+        @Field(type = FieldType.Keyword, name = "dob")
+        private String dob;
+
         @Field(type = FieldType.Keyword, name = "email")
         private String email;
 
         @Field(type = FieldType.Keyword, name = "gender")
         private String gender;
-
-        @Field(type = FieldType.Keyword, name = "dob")
-        private String dob;
 
         @Field(type = FieldType.Text, name = "address")
         private String address;
@@ -118,13 +113,13 @@ public class ProfileDocument {
 
     @Data
     public static class PlatformsDocument {
-        @Field(type = FieldType.Keyword)
+        @Field(type = FieldType.Keyword, name = "os")
         private String os;
 
-        @Field(type = FieldType.Keyword)
+        @Field(type = FieldType.Keyword, name = "device")
         private String device;
 
-        @Field(type = FieldType.Keyword)
+        @Field(type = FieldType.Keyword, name = "browser")
         private String browser;
 
         @Field(type = FieldType.Keyword, name = "app_version")
