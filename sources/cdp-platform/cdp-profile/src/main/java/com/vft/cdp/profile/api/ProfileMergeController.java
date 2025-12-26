@@ -5,7 +5,7 @@ import com.vft.cdp.profile.api.request.AutoMergeRequest;
 import com.vft.cdp.profile.api.request.ManualMergeRequest;
 import com.vft.cdp.profile.api.response.AutoMergeResponse;
 import com.vft.cdp.profile.api.response.MergeResponse;
-import com.vft.cdp.profile.application.merge.ProfileMergeService;
+import com.vft.cdp.profile.application.ProfileMergeService;
 import com.vft.cdp.common.profile.MasterProfile;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

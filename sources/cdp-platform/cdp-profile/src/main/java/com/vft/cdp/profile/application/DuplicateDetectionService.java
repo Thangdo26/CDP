@@ -1,10 +1,8 @@
-package com.vft.cdp.profile.application.merge;
+package com.vft.cdp.profile.application;
 
 import com.vft.cdp.common.profile.EnrichedProfile;
 import com.vft.cdp.profile.api.request.SearchProfileRequest;
 import com.vft.cdp.profile.domain.repository.ProfileRepository;
-import com.vft.cdp.profile.infra.es.ProfileDocument;
-import com.vft.cdp.profile.infra.es.ProfileMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -15,17 +13,12 @@ import java.util.stream.Collectors;
 
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * DUPLICATE DETECTION SERVICE
+ * DUPLICATE DETECTION SERVICE - FIXED VERSION
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * Detects duplicate profiles using multiple strategies:
- * 1. idcard_only - Match by ID card (CCCD/CMND)
- * 2. phone_dob - Match by phone + date of birth
- * 3. email_name - Match by email + full name
- * 4. phone_name - Match by phone + full name
- *
- * Returns: Map<GroupKey, List<EnrichedProfile>>
- * Example: {"idcard:035195012345" -> [Profile1, Profile2]}
+ * FIX: Load profiles in batches (PAGE_SIZE=100) to respect limit
+ * OLD: pageSize=1000 → Caused "Page size cannot exceed 100" error
+ * NEW: Load in batches of 100, up to MAX_PAGES=10 (1000 total)
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -35,13 +28,10 @@ public class DuplicateDetectionService {
 
     private final ProfileRepository profileRepository;
 
-    /**
-     * Find duplicates by strategy
-     *
-     * @param tenantId Tenant to search in
-     * @param strategy Strategy to use: "idcard_only", "phone_dob", "email_name", "phone_name", "all"
-     * @return Map of duplicate groups: {groupKey -> [profiles]}
-     */
+    // ✅ FIX: Respect EsProfileRepository.MAX_PAGE_SIZE = 100
+    private static final int PAGE_SIZE = 100;
+    private static final int MAX_PAGES = 10;   // Max 1000 profiles (100 * 10)
+
     public Map<String, List<EnrichedProfile>> findDuplicatesByStrategy(
             String tenantId,
             String strategy) {
@@ -52,7 +42,7 @@ public class DuplicateDetectionService {
         log.info("  Strategy: {}", strategy);
         log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
-        // Load all profiles for tenant
+        // ✅ FIX: Load with pagination
         List<EnrichedProfile> allProfiles = loadAllProfiles(tenantId);
 
         log.info("📊 Loaded {} profiles", allProfiles.size());
@@ -66,7 +56,6 @@ public class DuplicateDetectionService {
         Map<String, List<EnrichedProfile>> duplicateGroups;
 
         if ("all".equalsIgnoreCase(strategy)) {
-            // Apply all strategies
             duplicateGroups = new HashMap<>();
             duplicateGroups.putAll(findByIdCard(allProfiles));
             duplicateGroups.putAll(findByPhoneDob(allProfiles));
@@ -99,39 +88,62 @@ public class DuplicateDetectionService {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // LOAD PROFILES
+    // ✅ FIX: LOAD PROFILES WITH BATCH PAGINATION
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     /**
-     * Load all profiles for a tenant
+     * Load all profiles for a tenant with batch pagination
+     *
+     * BEFORE:
+     * - Request pageSize=1000 in one call
+     * - Error: "Page size cannot exceed 100"
+     *
+     * AFTER:
+     * - Load in batches of 100
+     * - Loop until all profiles loaded or MAX_PAGES reached
      */
     private List<EnrichedProfile> loadAllProfiles(String tenantId) {
-        SearchProfileRequest request = SearchProfileRequest.builder()
-                .tenantId(tenantId)
-                .page(0)
-                .pageSize(1000)  // Max 1000 profiles
-                .build();
+        List<EnrichedProfile> allProfiles = new ArrayList<>();
 
-        Page<EnrichedProfile> page = profileRepository.search(request);
+        int currentPage = 0;
+        boolean hasMore = true;
 
-        log.debug("  📄 Loaded {} profiles from page", page.getContent().size());
+        while (hasMore && currentPage < MAX_PAGES) {
 
-        return page.getContent();
+            SearchProfileRequest request = SearchProfileRequest.builder()
+                    .tenantId(tenantId)
+                    .page(currentPage)
+                    .pageSize(PAGE_SIZE)  // ✅ FIX: 100 instead of 1000
+                    .build();
+
+            log.debug("  📄 Loading page {} (size: {})", currentPage, PAGE_SIZE);
+
+            Page<EnrichedProfile> page = profileRepository.search(request);
+
+            allProfiles.addAll(page.getContent());
+
+            log.debug("  ✅ Loaded {} profiles (total: {})",
+                    page.getContent().size(), allProfiles.size());
+
+            hasMore = page.hasNext();
+            currentPage++;
+        }
+
+        if (hasMore) {
+            log.warn("⚠️  Reached max pages limit ({}). Total loaded: {}",
+                    MAX_PAGES, allProfiles.size());
+        }
+
+        log.info("📊 Total profiles loaded: {} from {} pages",
+                allProfiles.size(), currentPage);
+
+        return allProfiles;
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // STRATEGY 1: IDCARD ONLY
+    // MATCHING STRATEGIES
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    /**
-     * Find duplicates by ID Card (CCCD/CMND)
-     *
-     * Confidence: 100%
-     *
-     * Logic:
-     * - Group profiles with same idcard
-     * - Return groups with 2+ profiles
-     */
     private Map<String, List<EnrichedProfile>> findByIdCard(List<EnrichedProfile> profiles) {
         log.debug("🔍 Applying strategy: idcard_only");
 
@@ -141,7 +153,6 @@ public class DuplicateDetectionService {
                         && !p.getTraits().getIdcard().isBlank())
                 .collect(Collectors.groupingBy(p -> p.getTraits().getIdcard()));
 
-        // Filter: Keep only groups with 2+ profiles
         Map<String, List<EnrichedProfile>> duplicates = groups.entrySet().stream()
                 .filter(e -> e.getValue().size() >= 2)
                 .collect(Collectors.toMap(
@@ -150,24 +161,9 @@ public class DuplicateDetectionService {
                 ));
 
         log.debug("  ✅ Found {} duplicate groups by idcard", duplicates.size());
-
         return duplicates;
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // STRATEGY 2: PHONE + DOB
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    /**
-     * Find duplicates by Phone + DOB
-     *
-     * Confidence: 95%
-     *
-     * Logic:
-     * - Normalize phone (remove spaces, dashes)
-     * - Normalize DOB to YYYY-MM-DD format
-     * - Group by phone + dob combination
-     */
     private Map<String, List<EnrichedProfile>> findByPhoneDob(List<EnrichedProfile> profiles) {
         log.debug("🔍 Applying strategy: phone_dob");
 
@@ -181,34 +177,18 @@ public class DuplicateDetectionService {
                     return phone + "|" + dob;
                 }));
 
-        // Filter: Keep only groups with 2+ profiles
         Map<String, List<EnrichedProfile>> duplicates = groups.entrySet().stream()
                 .filter(e -> e.getValue().size() >= 2)
-                .filter(e -> !e.getKey().contains("null"))  // Exclude null values
+                .filter(e -> !e.getKey().contains("null"))
                 .collect(Collectors.toMap(
                         e -> "phone_dob:" + e.getKey(),
                         Map.Entry::getValue
                 ));
 
         log.debug("  ✅ Found {} duplicate groups by phone_dob", duplicates.size());
-
         return duplicates;
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // STRATEGY 3: EMAIL + NAME
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    /**
-     * Find duplicates by Email + Full Name
-     *
-     * Confidence: 85%
-     *
-     * Logic:
-     * - Normalize email (lowercase)
-     * - Normalize name (remove accents, lowercase)
-     * - Group by email + name combination
-     */
     private Map<String, List<EnrichedProfile>> findByEmailName(List<EnrichedProfile> profiles) {
         log.debug("🔍 Applying strategy: email_name");
 
@@ -222,7 +202,6 @@ public class DuplicateDetectionService {
                     return email + "|" + name;
                 }));
 
-        // Filter: Keep only groups with 2+ profiles
         Map<String, List<EnrichedProfile>> duplicates = groups.entrySet().stream()
                 .filter(e -> e.getValue().size() >= 2)
                 .filter(e -> !e.getKey().contains("null"))
@@ -232,24 +211,9 @@ public class DuplicateDetectionService {
                 ));
 
         log.debug("  ✅ Found {} duplicate groups by email_name", duplicates.size());
-
         return duplicates;
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // STRATEGY 4: PHONE + NAME
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    /**
-     * Find duplicates by Phone + Full Name
-     *
-     * Confidence: 75%
-     *
-     * Logic:
-     * - Normalize phone
-     * - Normalize name (remove accents, lowercase)
-     * - Group by phone + name combination
-     */
     private Map<String, List<EnrichedProfile>> findByPhoneName(List<EnrichedProfile> profiles) {
         log.debug("🔍 Applying strategy: phone_name");
 
@@ -263,7 +227,6 @@ public class DuplicateDetectionService {
                     return phone + "|" + name;
                 }));
 
-        // Filter: Keep only groups with 2+ profiles
         Map<String, List<EnrichedProfile>> duplicates = groups.entrySet().stream()
                 .filter(e -> e.getValue().size() >= 2)
                 .filter(e -> !e.getKey().contains("null"))
@@ -273,7 +236,6 @@ public class DuplicateDetectionService {
                 ));
 
         log.debug("  ✅ Found {} duplicate groups by phone_name", duplicates.size());
-
         return duplicates;
     }
 
@@ -281,119 +243,50 @@ public class DuplicateDetectionService {
     // NORMALIZATION HELPERS
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    /**
-     * Normalize phone number
-     *
-     * Examples:
-     * - "0987-654-321" → "0987654321"
-     * - "+84 987 654 321" → "0987654321"
-     * - "0987 654 321" → "0987654321"
-     */
     private String normalizePhone(String phone) {
-        if (phone == null || phone.isBlank()) {
-            return "";
-        }
-
-        // Remove all non-digit characters
+        if (phone == null || phone.isBlank()) return "";
         String digits = phone.replaceAll("[^0-9]", "");
-
-        // Handle +84 country code
         if (digits.startsWith("84") && digits.length() >= 10) {
             digits = "0" + digits.substring(2);
         }
-
         return digits;
     }
 
-    /**
-     * Normalize date of birth
-     *
-     * Examples:
-     * - "20/03/1995" → "1995-03-20"
-     * - "1995-03-20" → "1995-03-20"
-     * - "1995/03/20" → "1995-03-20"
-     */
     private String normalizeDob(String dob) {
-        if (dob == null || dob.isBlank()) {
-            return "";
-        }
-
+        if (dob == null || dob.isBlank()) return "";
         dob = dob.trim();
 
-        // Already in YYYY-MM-DD format
-        if (dob.matches("\\d{4}-\\d{2}-\\d{2}")) {
-            return dob;
-        }
-
-        // DD/MM/YYYY format
+        if (dob.matches("\\d{4}-\\d{2}-\\d{2}")) return dob;
         if (dob.matches("\\d{2}/\\d{2}/\\d{4}")) {
             String[] parts = dob.split("/");
             return parts[2] + "-" + parts[1] + "-" + parts[0];
         }
-
-        // YYYY/MM/DD format
         if (dob.matches("\\d{4}/\\d{2}/\\d{2}")) {
             return dob.replace("/", "-");
         }
-
-        // DD-MM-YYYY format
         if (dob.matches("\\d{2}-\\d{2}-\\d{4}")) {
             String[] parts = dob.split("-");
             return parts[2] + "-" + parts[1] + "-" + parts[0];
         }
-
         return dob;
     }
 
-    /**
-     * Normalize email
-     *
-     * Examples:
-     * - "User@Gmail.Com" → "user@gmail.com"
-     * - "  test@example.com  " → "test@example.com"
-     */
     private String normalizeEmail(String email) {
-        if (email == null || email.isBlank()) {
-            return "";
-        }
-
+        if (email == null || email.isBlank()) return "";
         return email.trim().toLowerCase();
     }
 
-    /**
-     * Normalize full name (remove accents, lowercase, trim)
-     *
-     * Examples:
-     * - "Nguyễn Văn A" → "nguyen van a"
-     * - "NGUYEN VAN A" → "nguyen van a"
-     * - "  Nguyen  Van  A  " → "nguyen van a"
-     */
     private String normalizeName(String name) {
-        if (name == null || name.isBlank()) {
-            return "";
-        }
-
-        // Remove Vietnamese accents
+        if (name == null || name.isBlank()) return "";
         name = removeVietnameseAccents(name);
-
-        // Lowercase
         name = name.toLowerCase();
-
-        // Remove extra spaces
         name = name.trim().replaceAll("\\s+", " ");
-
         return name;
     }
 
-    /**
-     * Remove Vietnamese accents
-     */
     private String removeVietnameseAccents(String text) {
-        if (text == null || text.isBlank()) {
-            return text;
-        }
+        if (text == null || text.isBlank()) return text;
 
-        // Lowercase vowels
         text = text.replaceAll("[àáạảãâầấậẩẫăằắặẳẵ]", "a");
         text = text.replaceAll("[èéẹẻẽêềếệểễ]", "e");
         text = text.replaceAll("[ìíịỉĩ]", "i");
@@ -402,7 +295,6 @@ public class DuplicateDetectionService {
         text = text.replaceAll("[ỳýỵỷỹ]", "y");
         text = text.replaceAll("đ", "d");
 
-        // Uppercase vowels
         text = text.replaceAll("[ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴ]", "A");
         text = text.replaceAll("[ÈÉẸẺẼÊỀẾỆỂỄ]", "E");
         text = text.replaceAll("[ÌÍỊỈĨ]", "I");
