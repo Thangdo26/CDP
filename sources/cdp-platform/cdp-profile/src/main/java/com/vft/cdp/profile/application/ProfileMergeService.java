@@ -3,6 +3,7 @@ package com.vft.cdp.profile.application;
 import com.vft.cdp.profile.api.response.AutoMergeResponse;
 import com.vft.cdp.profile.domain.MasterProfile;
 import com.vft.cdp.profile.domain.Profile;
+import com.vft.cdp.profile.infra.cache.MasterProfileCacheService;
 import com.vft.cdp.profile.infra.es.SpringDataMasterProfileRepository;
 import com.vft.cdp.profile.infra.es.SpringDataProfileRepository;
 import com.vft.cdp.profile.infra.es.document.MasterProfileDocument;
@@ -17,6 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.vft.cdp.profile.infra.es.mapper.MasterProfileMapper;
+import com.vft.cdp.profile.application.dto.MasterProfileDTO;
+import com.vft.cdp.profile.application.mapper.MasterProfileDTOMapper;
 
 
 import java.time.Instant;
@@ -45,6 +48,7 @@ public class ProfileMergeService {
     private final SpringDataMasterProfileRepository masterProfileRepo;
     private final SpringDataProfileRepository profileRepo;
     private final DuplicateDetectionService duplicateDetector;
+    private final MasterProfileCacheService masterProfileCache;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // AUTO MERGE
@@ -57,12 +61,7 @@ public class ProfileMergeService {
             Boolean dryRun,
             Integer maxGroups) {
 
-        log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        log.info("🤖 AUTO MERGE (DOMAIN PROFILE)");
-        log.info("  Tenant: {}", tenantId);
-        log.info("  Strategy: {}", mergeStrategy);
-        log.info("  Dry Run: {}", dryRun);
-        log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        List<String> createdMasterIds = new ArrayList<>();
 
         long startTime = System.currentTimeMillis();
 
@@ -102,9 +101,6 @@ public class ProfileMergeService {
             List<Profile> profiles = entry.getValue();
 
             try {
-                log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                log.info("🔀 Processing group: {}", groupKey);
-                log.info("  Profiles: {}", profiles.size());
 
                 MergeDecision decision = decideMergeAction(profiles);
 
@@ -156,6 +152,11 @@ public class ProfileMergeService {
             } catch (Exception ex) {
                 log.error("❌ Failed to merge group: {}", groupKey, ex);
             }
+        }
+        if (!createdMasterIds.isEmpty()) {
+            log.info("🧹 Invalidating cache for {} newly created master profiles",
+                    createdMasterIds.size());
+            masterProfileCache.evictMultiple(createdMasterIds);
         }
 
         // 4. RESOLVE CONFLICTS
@@ -366,11 +367,10 @@ public class ProfileMergeService {
         );
 
         MasterProfileDocument saved = masterProfileRepo.save(existingMaster);
+        // ✅ NEW: Invalidate cache after update
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        log.info("  ✅ Master updated: {} profiles, version={}, last_seen_at={}",
-                saved.getMergedProfileIds().size(),
-                saved.getVersion(),
-                saved.getLastSeenAt());
+        masterProfileCache.evict(saved.getMasterId());
 
         markProfilesAsMerged(newProfiles, saved.getMasterId());
 
@@ -677,13 +677,15 @@ public class ProfileMergeService {
             List<Profile> newProfiles) {
 
         log.info("  🔀 Merging {} existing masters", existingMasters.size());
+        List<String> masterIdsToInvalidate = existingMasters.stream()
+                .map(MasterProfileDocument::getMasterId)
+                .collect(Collectors.toList());
 
         // Select primary master (oldest one)
         MasterProfileDocument primaryMaster = existingMasters.stream()
                 .min(Comparator.comparing(m -> m.getCreatedAt() != null ? m.getCreatedAt() : Instant.now()))
                 .orElse(existingMasters.get(0));
 
-        log.info("  👑 Primary master: {}", primaryMaster.getMasterId());
 
         // Collect all profile IDs
         Set<String> allProfileIds = new HashSet<>();
@@ -751,6 +753,8 @@ public class ProfileMergeService {
                 updateProfileReferences(deletedMaster.getMergedProfileIds(), saved.getMasterId());
             }
         }
+
+        masterProfileCache.evictMultiple(masterIdsToInvalidate);
 
         return saved.getMasterId();
     }
@@ -920,7 +924,7 @@ public class ProfileMergeService {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     @Transactional
-    public MasterProfile manualMerge(
+    public MasterProfileDTO manualMerge(
             String tenantId,
             List<String> profileIds,
             Boolean forceMerge,
@@ -970,10 +974,27 @@ public class ProfileMergeService {
                         ProfileMapper.buildId(tenantId, profiles.get(0).getAppId(), masterProfileId))
                 .orElseThrow(() -> new IllegalArgumentException("Master not found"));
 
-        return MasterProfileMapper.toDomain(doc);
+        MasterProfile masterProfile = MasterProfileMapper.toDomain(doc);
+        MasterProfileDTO dto = MasterProfileDTOMapper.toDTO(masterProfile);
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // ✅ NEW: Cache the newly created master profile
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        masterProfileCache.put(masterProfile.getProfileId(), dto);
+        log.info("📝 Cached newly merged master profile: masterId={}", masterProfile.getProfileId());
+
+        return dto;
     }
 
-    public MasterProfile getMasterProfile(String masterProfileId) {
+    public MasterProfileDTO getMasterProfile(String masterProfileId) {
+        Optional<MasterProfileDTO> cached = masterProfileCache.get(masterProfileId);
+        if (cached.isPresent()) {
+            log.info("✅ Cache HIT: masterId={}", masterProfileId);
+            return cached.get();
+        }
+        log.debug("❌ Cache MISS: masterId={}, loading from ES", masterProfileId);
+
         //  FIX: Use findByMasterId instead of findAll + filter
         MasterProfileDocument doc = masterProfileRepo.findByMasterId(masterProfileId)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -982,7 +1003,15 @@ public class ProfileMergeService {
         log.info(" Found master profile: masterId={}, mergedCount={}",
                 masterProfileId, doc.getMergeCount());
 
-        return MasterProfileMapper.toDomain(doc);
+        MasterProfile masterProfile = MasterProfileMapper.toDomain(doc);
+        MasterProfileDTO dto = MasterProfileDTOMapper.toDTO(masterProfile);
+
+        // STEP 4: Cache the result (L1 + L2)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        masterProfileCache.put(masterProfileId, dto);
+        log.info("📝 Cached master profile: masterId={}", masterProfileId);
+        return dto;
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

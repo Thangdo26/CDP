@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import com.vft.cdp.profile.api.response.MasterProfileResponse;
+import com.vft.cdp.profile.application.dto.MasterProfileDTO;
 
 import java.time.Instant;
 
@@ -170,7 +172,7 @@ public class ProfileMergeController {
                 );
             }
 
-            MasterProfile masterProfile = mergeService.manualMerge(
+            MasterProfileDTO masterProfile = mergeService.manualMerge(
                     request.getTenantId(),
                     request.getProfileIds(),
                     request.getForceMerge(),
@@ -222,21 +224,28 @@ public class ProfileMergeController {
      * GET /v1/profiles/master/mp_123e4567-e89b-12d3-a456-426614174000
      */
     @GetMapping("/master/{masterProfileId}")
-    public ResponseEntity<?> getMasterProfile(
-            @PathVariable ("masterProfileId") String masterProfileId,
+    public ResponseEntity<MasterProfileResponse> getMasterProfile(
+            @PathVariable("masterProfileId") String masterProfileId,
             @AuthenticationPrincipal ApiKeyAuthContext authContext) {
 
         log.info("🔍 GET MASTER PROFILE: id={}", masterProfileId);
 
         try {
-            MasterProfile masterProfile = mergeService.getMasterProfile(masterProfileId);
+            // Service returns DTO
+            MasterProfileDTO masterProfileDTO = mergeService.getMasterProfile(masterProfileId);
 
-            return ResponseEntity.ok(masterProfile);
+            // Convert DTO → Response
+            MasterProfileResponse response = MasterProfileResponse.fromDTO(masterProfileDTO);
+
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalArgumentException ex) {
+            log.warn("⚠️  Master profile not found: {}", ex.getMessage());
+            return ResponseEntity.notFound().build();
 
         } catch (Exception ex) {
             log.error("❌ GET MASTER PROFILE failed", ex);
-
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.status(500).build();
         }
     }
 }

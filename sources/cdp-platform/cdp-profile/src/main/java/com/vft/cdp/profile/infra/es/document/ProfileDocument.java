@@ -82,7 +82,13 @@ public class ProfileDocument {
 
     @Field(type = FieldType.Date, name = "updated_at", format = DateFormat.date_hour_minute_second_millis)
     private Instant updatedAt;
-    
+
+    @Field(type = FieldType.Date, name = "first_seen_at", format = DateFormat.date_hour_minute_second_millis)
+    private Instant firstSeenAt;
+
+    @Field(type = FieldType.Date, name = "last_seen_at", format = DateFormat.date_hour_minute_second_millis)
+    private Instant lastSeenAt;
+
     @Field(type = FieldType.Integer, name = "version")
     private Integer version;
 
