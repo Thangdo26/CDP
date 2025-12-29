@@ -244,11 +244,6 @@ public class Profile implements ProfileModel {
             this.updatedAt = Instant.now();
             this.version = (this.version != null ? this.version : 0) + 1;
 
-            // ✅ NOTE: last_seen_at/first_seen_at KHÔNG tự động update ở đây
-            // Chúng được extract từ metadata trong ProfileService
-
-            log.debug("  📅 Updated timestamps: updatedAt={}, version={}",
-                    this.updatedAt, this.version);
         }
 
         return reactivatedFromMasterId;

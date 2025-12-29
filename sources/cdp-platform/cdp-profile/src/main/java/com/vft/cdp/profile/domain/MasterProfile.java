@@ -489,6 +489,9 @@ public class MasterProfile implements MasterProfileModel {
         private String country;
         private String city;
         private String address;
+        private String idcard;
+        private String oldIdcard;
+        private String religion;
         private Double lastPurchaseAmount;
         private Instant lastPurchaseAt;
     }

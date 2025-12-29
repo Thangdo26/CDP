@@ -105,15 +105,17 @@ public final class MasterProfileMapper {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private static MasterProfile.MasterTraits mergeTraitsWithPriority(List<Profile> profiles) {
-        // Aggregate list fields (collect all unique values)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // AGGREGATE LIST FIELDS
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         List<String> emails = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
                 .map(traits -> traits.getEmail())
                 .filter(Objects::nonNull)
-                .map(String::toLowerCase)
-                .distinct()
+                .filter(e -> !e.isBlank())
+                .distinct()  // ✅ KHÔNG toLowerCase
                 .collect(Collectors.toList());
 
         List<String> phones = profiles.stream()
@@ -121,19 +123,22 @@ public final class MasterProfileMapper {
                 .filter(Objects::nonNull)
                 .map(traits -> traits.getPhone())
                 .filter(Objects::nonNull)
+                .filter(p -> !p.isBlank())
                 .distinct()
                 .collect(Collectors.toList());
 
+        // ✅ FIXED: Get from profile.getUserId(), NOT idcard
         List<String> userIds = profiles.stream()
-                .map(Profile::getTraits)
+                .map(Profile::getUserId)
                 .filter(Objects::nonNull)
-                .map(traits -> traits.getIdcard())
-                .filter(Objects::nonNull)
+                .filter(id -> !id.isBlank())
                 .distinct()
                 .collect(Collectors.toList());
 
-        // NEW: Single value fields - prefer NEWEST profile (first non-null)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // SINGLE VALUE FIELDS (from NEWEST profile)
         // Profiles are already sorted by last_seen_at DESC
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         String firstName = profiles.stream()
                 .map(Profile::getTraits)
@@ -175,6 +180,33 @@ public final class MasterProfileMapper {
                 .findFirst()
                 .orElse(null);
 
+        // ✅ NEW: Get idcard, oldIdcard, religion from NEWEST profile
+        String idcard = profiles.stream()
+                .map(Profile::getTraits)
+                .filter(Objects::nonNull)
+                .map(traits -> traits.getIdcard())
+                .filter(Objects::nonNull)
+                .filter(id -> !id.isBlank())
+                .findFirst()
+                .orElse(null);
+
+        String oldIdcard = profiles.stream()
+                .map(Profile::getTraits)
+                .filter(Objects::nonNull)
+                .map(traits -> traits.getOldIdcard())
+                .filter(Objects::nonNull)
+                .filter(id -> !id.isBlank())
+                .findFirst()
+                .orElse(null);
+
+        String religion = profiles.stream()
+                .map(Profile::getTraits)
+                .filter(Objects::nonNull)
+                .map(traits -> traits.getReligion())
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+
         return MasterProfile.MasterTraits.builder()
                 .email(emails)
                 .phone(phones)
@@ -184,6 +216,9 @@ public final class MasterProfileMapper {
                 .gender(gender)
                 .dob(dob)
                 .address(address)
+                .idcard(idcard)
+                .oldIdcard(oldIdcard)
+                .religion(religion)
                 .build();
     }
 
@@ -290,17 +325,28 @@ public final class MasterProfileMapper {
         if (traits == null) return null;
 
         return MasterProfileDocument.Traits.builder()
-                .email(traits.getEmail() != null && !traits.getEmail().isEmpty()
-                        ? traits.getEmail().get(0) : null)
-                .phone(traits.getPhone() != null && !traits.getPhone().isEmpty()
-                        ? traits.getPhone().get(0) : null)
+                // ✅ Keep as list
+                .email(traits.getEmail() != null ? new ArrayList<>(traits.getEmail()) : new ArrayList<>())
+                .phone(traits.getPhone() != null ? new ArrayList<>(traits.getPhone()) : new ArrayList<>())
+                .userId(traits.getUserId() != null ? new ArrayList<>(traits.getUserId()) : new ArrayList<>())
+
+                // Single values
+                .fullName(traits.getFirstName() != null && traits.getLastName() != null
+                        ? traits.getFirstName() + " " + traits.getLastName()
+                        : null)
                 .firstName(traits.getFirstName())
                 .lastName(traits.getLastName())
                 .gender(traits.getGender())
                 .dob(traits.getDob())
                 .address(traits.getAddress())
+
+                // ✅ NEW: Map idcard, oldIdcard, religion
+                .idcard(traits.getIdcard())
+                .oldIdcard(traits.getOldIdcard())
+                .religion(traits.getReligion())
                 .build();
     }
+
 
     // Overload for MasterProfileModel.MasterTraitsModel (interface)
     private static MasterProfileDocument.Traits mapTraitsToDoc(
@@ -308,15 +354,25 @@ public final class MasterProfileMapper {
         if (traits == null) return null;
 
         return MasterProfileDocument.Traits.builder()
-                .email(traits.getEmail() != null && !traits.getEmail().isEmpty()
-                        ? traits.getEmail().get(0) : null)
-                .phone(traits.getPhone() != null && !traits.getPhone().isEmpty()
-                        ? traits.getPhone().get(0) : null)
+                // Keep as list
+                .email(traits.getEmail() != null ? new ArrayList<>(traits.getEmail()) : new ArrayList<>())
+                .phone(traits.getPhone() != null ? new ArrayList<>(traits.getPhone()) : new ArrayList<>())
+                .userId(traits.getUserId() != null ? new ArrayList<>(traits.getUserId()) : new ArrayList<>())
+
+                // Single values
+                .fullName(traits.getFirstName() != null && traits.getLastName() != null
+                        ? traits.getFirstName() + " " + traits.getLastName()
+                        : null)
                 .firstName(traits.getFirstName())
                 .lastName(traits.getLastName())
                 .gender(traits.getGender())
                 .dob(traits.getDob())
                 .address(traits.getAddress())
+
+                // NEW: Map idcard, oldIdcard, religion
+                .idcard(traits.getIdcard())
+                .oldIdcard(traits.getOldIdcard())
+                .religion(traits.getReligion())
                 .build();
     }
 
@@ -324,14 +380,21 @@ public final class MasterProfileMapper {
         if (traits == null) return null;
 
         return MasterProfile.MasterTraits.builder()
-                .email(traits.getEmail() != null ? List.of(traits.getEmail()) : new ArrayList<>())
-                .phone(traits.getPhone() != null ? List.of(traits.getPhone()) : new ArrayList<>())
-                .userId(new ArrayList<>())
+                // ✅ FIXED: Already List<String>
+                .email(traits.getEmail() != null ? new ArrayList<>(traits.getEmail()) : new ArrayList<>())
+                .phone(traits.getPhone() != null ? new ArrayList<>(traits.getPhone()) : new ArrayList<>())
+                .userId(traits.getUserId() != null ? new ArrayList<>(traits.getUserId()) : new ArrayList<>())
+
                 .firstName(traits.getFirstName())
                 .lastName(traits.getLastName())
                 .gender(traits.getGender())
                 .dob(traits.getDob())
                 .address(traits.getAddress())
+
+                // ✅ NEW: Map idcard, oldIdcard, religion
+                .idcard(traits.getIdcard())
+                .oldIdcard(traits.getOldIdcard())
+                .religion(traits.getReligion())
                 .build();
     }
 

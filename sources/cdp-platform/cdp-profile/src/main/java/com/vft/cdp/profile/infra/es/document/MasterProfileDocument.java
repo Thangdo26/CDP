@@ -104,37 +104,43 @@ public class MasterProfileDocument {
     @Builder
     public static class Traits {
         @Field(type = FieldType.Text, name = "full_name")
-        private String fullName;
+        private String fullName;  // 
 
         @Field(type = FieldType.Keyword, name = "first_name")
-        private String firstName;
+        private String firstName;  // 
 
         @Field(type = FieldType.Keyword, name = "last_name")
-        private String lastName;
+        private String lastName;  // 
 
         @Field(type = FieldType.Keyword, name = "idcard")
-        private String idcard;
+        private String idcard;  // 
 
         @Field(type = FieldType.Keyword, name = "old_idcard")
-        private String oldIdcard;
+        private String oldIdcard;  // 
 
-        @Field(type = FieldType.Keyword, name = "phone")
-        private String phone;
-
+        // ✅ CHANGED: Email is now a LIST
         @Field(type = FieldType.Keyword, name = "email")
-        private String email;
+        private List<String> email;  // ✅ Aggregate all unique emails
+
+        // ✅ CHANGED: Phone is now a LIST
+        @Field(type = FieldType.Keyword, name = "phone")
+        private List<String> phone;  // ✅ Aggregate all unique phones
+
+        // ✅ NEW: User ID list
+        @Field(type = FieldType.Keyword, name = "user_id")
+        private List<String> userId;  //
 
         @Field(type = FieldType.Keyword, name = "gender")
-        private String gender;
+        private String gender;  // 
 
         @Field(type = FieldType.Keyword, name = "dob")
-        private String dob;
+        private String dob;  // 
 
         @Field(type = FieldType.Text, name = "address")
-        private String address;
+        private String address;  // 
 
         @Field(type = FieldType.Keyword, name = "religion")
-        private String religion;
+        private String religion;  // 
     }
 
     @Data

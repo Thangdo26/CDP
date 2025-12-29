@@ -29,8 +29,8 @@ import java.util.stream.Stream;
  * PROFILE MERGE SERVICE - PURE DOMAIN
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ NO EnrichedProfile - uses Domain Profile only
- * ✅ GUARANTEES:
+ *  NO EnrichedProfile - uses Domain Profile only
+ *  GUARANTEES:
  * 1. UNIQUENESS: One person = One master profile
  * 2. IDEMPOTENCY: Running merge multiple times = Same result
  * 3. UPDATE: New matching profile → Update existing master
@@ -71,7 +71,7 @@ public class ProfileMergeService {
                 duplicateDetector.findDuplicatesByStrategy(tenantId, mergeStrategy);
 
         if (duplicateGroups.isEmpty()) {
-            log.info("✅ No duplicates found");
+            log.info(" No duplicates found");
             return buildEmptyResult();
         }
 
@@ -114,7 +114,7 @@ public class ProfileMergeService {
                     case CREATE_NEW:
                         masterProfileId = createNewMaster(profiles, groupKey);
                         mastersCreated++;
-                        log.info("  ✅ Created new master: {}", masterProfileId);
+                        log.info("   Created new master: {}", masterProfileId);
                         break;
 
                     case UPDATE_EXISTING:
@@ -123,7 +123,7 @@ public class ProfileMergeService {
                                 profiles
                         );
                         mastersUpdated++;
-                        log.info("  ✅ Updated existing master: {}", masterProfileId);
+                        log.info("   Updated existing master: {}", masterProfileId);
                         break;
 
                     case MERGE_MASTERS:
@@ -132,7 +132,7 @@ public class ProfileMergeService {
                                 profiles
                         );
                         mastersCreated++;
-                        log.info("  ✅ Merged {} masters into: {}",
+                        log.info("   Merged {} masters into: {}",
                                 decision.getExistingMasters().size(), masterProfileId);
                         break;
 
@@ -164,7 +164,7 @@ public class ProfileMergeService {
         long duration = System.currentTimeMillis() - startTime;
 
         log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        log.info("✅ AUTO MERGE COMPLETED");
+        log.info(" AUTO MERGE COMPLETED");
         log.info("  Masters created: {}", mastersCreated);
         log.info("  Masters updated: {}", mastersUpdated);
         log.info("  Masters merged: {}", mastersMerged);
@@ -191,7 +191,7 @@ public class ProfileMergeService {
                 .collect(Collectors.toList());
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // STEP 1: Check by merged profile IDs (existing logic)
+        // STEP 1: Check by merged profile IDs
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         Set<MasterProfileDocument> existingMasters = new HashSet<>();
@@ -203,34 +203,31 @@ public class ProfileMergeService {
         }
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // STEP 2: Check by IDCARD (NEW - Smart merge)
+        // STEP 2: ALWAYS Check by IDCARD
+        // ✅ REMOVED: if (existingMasters.isEmpty())
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        if (existingMasters.isEmpty()) {
-            // Extract idcards from profiles
-            Set<String> idcards = profiles.stream()
-                    .map(Profile::getTraits)
-                    .filter(Objects::nonNull)
-                    .map(traits -> traits.getIdcard())
-                    .filter(Objects::nonNull)
-                    .filter(idcard -> !idcard.isBlank())
-                    .collect(Collectors.toSet());
+        Set<String> idcards = profiles.stream()
+                .map(Profile::getTraits)
+                .filter(Objects::nonNull)
+                .map(traits -> traits.getIdcard())
+                .filter(Objects::nonNull)
+                .filter(idcard -> !idcard.isBlank())
+                .collect(Collectors.toSet());
 
-            // Check if any master profile has matching idcard
-            for (String idcard : idcards) {
-                List<MasterProfileDocument> mastersByIdcard =
-                        masterProfileRepo.findByTraitsIdcard(idcard);
+        for (String idcard : idcards) {
+            List<MasterProfileDocument> mastersByIdcard =
+                    masterProfileRepo.findByTraitsIdcard(idcard);
 
-                if (!mastersByIdcard.isEmpty()) {
-                    log.info("  🎯 Found {} existing master(s) with same idcard: {}",
-                            mastersByIdcard.size(), idcard);
-                    existingMasters.addAll(mastersByIdcard);
-                }
+            if (!mastersByIdcard.isEmpty()) {
+                log.info("  🎯 Found {} existing master(s) with same idcard: {}",
+                        mastersByIdcard.size(), idcard);
+                existingMasters.addAll(mastersByIdcard);
             }
         }
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // STEP 3: Decide action based on findings
+        // STEP 3: Decide action
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         log.debug("  🔍 Found {} existing masters for {} profiles",
@@ -249,7 +246,6 @@ public class ProfileMergeService {
                     .build();
         }
 
-        // Multiple masters found - need to merge them
         return MergeDecision.builder()
                 .action(MergeAction.MERGE_MASTERS)
                 .existingMasters(new ArrayList<>(existingMasters))
@@ -310,60 +306,44 @@ public class ProfileMergeService {
         existingMaster.setMergeCount(updatedMergedIds.size());
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // ✅ FIX: Combine ALL profiles (existing + new) for comparison
+        //  Load ALL merged profiles (existing + new)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        // Get ALL merged profiles
         List<Profile> allMergedProfiles = new ArrayList<>(newProfiles);
 
-        // Add existing merged profiles (if we can load them)
         if (currentMergedIds != null && !currentMergedIds.isEmpty()) {
             List<Profile> existingProfiles = loadProfiles(currentMergedIds);
             allMergedProfiles.addAll(existingProfiles);
         }
 
-        // ✅ Find the ABSOLUTE newest profile across ALL profiles
-        Profile newestProfile = allMergedProfiles.stream()
-                .max(Comparator.comparing(
-                        p -> p.getLastSeenAt() != null ? p.getLastSeenAt() : Instant.MIN
-                ))
-                .orElse(newProfiles.get(0));
+        //  Sort by last_seen_at DESC (newest first)
+        allMergedProfiles.sort((p1, p2) -> {
+            Instant t1 = p1.getLastSeenAt();
+            Instant t2 = p2.getLastSeenAt();
 
+            if (t1 == null && t2 == null) return 0;
+            if (t1 == null) return 1;   // null last
+            if (t2 == null) return -1;  // null last
+
+            return t2.compareTo(t1);  // DESC
+        });
+
+        Profile newestProfile = allMergedProfiles.get(0);
         Instant newestLastSeenAt = newestProfile.getLastSeenAt();
 
         log.info("  🔍 Newest profile: userId={}, last_seen_at={}",
                 newestProfile.getUserId(), newestLastSeenAt);
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // ✅ FIX: Only update if incoming profile is NEWER than master
+        //  Update master with ALL profiles
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        boolean shouldUpdate = false;
+        updateMasterTraitsFromAllProfiles(existingMaster, allMergedProfiles, newestProfile);
+        updateMasterPlatformsWithPriority(existingMaster, newestProfile);
+        updateMasterCampaignWithPriority(existingMaster, newestProfile);
 
-        if (existingMaster.getLastSeenAt() == null) {
-            shouldUpdate = true;
-            log.info("  ✅ Master has no last_seen_at, will update");
-
-        } else if (newestLastSeenAt != null &&
-                newestLastSeenAt.isAfter(existingMaster.getLastSeenAt())) {
-            shouldUpdate = true;
-            log.info("  ✅ Newest profile is NEWER than master: {} > {}",
-                    newestLastSeenAt, existingMaster.getLastSeenAt());
-
-        } else {
-            log.info("  ⏭️  Newest profile is OLDER than or EQUAL to master, skip trait update");
-        }
-
-        // ✅ Update traits/platforms/campaign if newer
-        if (shouldUpdate) {
-            updateMasterTraitsWithPriority(existingMaster, newestProfile);
-            updateMasterPlatformsWithPriority(existingMaster, newestProfile);
-            updateMasterCampaignWithPriority(existingMaster, newestProfile);
-
-            // Update last_seen_at
-            existingMaster.setLastSeenAt(newestLastSeenAt);
-            log.info("  📅 Updated last_seen_at: {}", newestLastSeenAt);
-        }
+        // Update last_seen_at
+        existingMaster.setLastSeenAt(newestLastSeenAt);
 
         // Always update metadata
         existingMaster.setUpdatedAt(Instant.now());
@@ -373,7 +353,7 @@ public class ProfileMergeService {
 
         MasterProfileDocument saved = masterProfileRepo.save(existingMaster);
 
-        log.info("  ✅ Master updated: {} profiles, version={}",
+        log.info("   Master updated: {} profiles, version={}",
                 saved.getMergedProfileIds().size(), saved.getVersion());
 
         markProfilesAsMerged(newProfiles, saved.getMasterId());
@@ -381,96 +361,151 @@ public class ProfileMergeService {
         return saved.getMasterId();
     }
 
-    /**
-     * ✅ FIXED: Update master traits from NEWEST profile
-     *
-     * Strategy: ALWAYS update ALL fields from newest profile
-     * No more "only if null" logic
-     */
-    private void updateMasterTraitsWithPriority(
+    private void updateMasterTraitsFromAllProfiles(
             MasterProfileDocument master,
+            List<Profile> allProfiles,
             Profile newestProfile) {
 
         if (master.getTraits() == null) {
             master.setTraits(new MasterProfileDocument.Traits());
         }
 
-        // ✅ FIX: Use ProfileModel.TraitsModel (interface) instead of Profile.Traits
-        ProfileModel.TraitsModel sourceTraits = newestProfile.getTraits();
-
-        if (sourceTraits == null) {
-            return;
-        }
-
         MasterProfileDocument.Traits traits = master.getTraits();
 
-        // ✅ UPDATE ALL FIELDS from newest profile
+        // Initialize lists
+        if (traits.getEmail() == null) traits.setEmail(new ArrayList<>());
+        if (traits.getPhone() == null) traits.setPhone(new ArrayList<>());
+        if (traits.getUserId() == null) traits.setUserId(new ArrayList<>());
 
-        if (sourceTraits.getFullName() != null) {
-            traits.setFullName(sourceTraits.getFullName());
-            log.debug("  📝 Updated fullName: {}", traits.getFullName());
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        //  COLLECT EMAILS - PRESERVE ORIGINAL CASE
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        List<String> allEmails = allProfiles.stream()
+                .map(Profile::getTraits)
+                .filter(java.util.Objects::nonNull)
+                .map(t -> t.getEmail())
+                .filter(java.util.Objects::nonNull)
+                .filter(e -> !e.isBlank())
+                .map(String::trim)  //  ONLY trim, NOT toLowerCase
+                .collect(Collectors.toList());
+
+        // Add emails with case-insensitive duplicate check
+        for (String email : allEmails) {
+            boolean exists = traits.getEmail().stream()
+                    .anyMatch(existing -> existing.equalsIgnoreCase(email));
+
+            if (!exists) {
+                traits.getEmail().add(email);  //  Keep original case
+                log.debug("  📧 Added email: {}", email);
+            }
         }
 
-        if (sourceTraits.getFirstName() != null) {
-            traits.setFirstName(sourceTraits.getFirstName());
-            log.debug("  📝 Updated firstName: {}", traits.getFirstName());
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // COLLECT PHONES
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        Set<String> allPhones = allProfiles.stream()
+                .map(Profile::getTraits)
+                .filter(java.util.Objects::nonNull)
+                .map(t -> t.getPhone())
+                .filter(java.util.Objects::nonNull)
+                .filter(p -> !p.isBlank())
+                .map(String::trim)
+                .collect(Collectors.toSet());
+
+        for (String phone : allPhones) {
+            if (!traits.getPhone().contains(phone)) {
+                traits.getPhone().add(phone);
+                log.debug("  📱 Added phone: {}", phone);
+            }
         }
 
-        if (sourceTraits.getLastName() != null) {
-            traits.setLastName(sourceTraits.getLastName());
-            log.debug("  📝 Updated lastName: {}", traits.getLastName());
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // COLLECT USER IDs
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        Set<String> allUserIds = allProfiles.stream()
+                .map(Profile::getUserId)
+                .filter(java.util.Objects::nonNull)
+                .filter(id -> !id.isBlank())
+                .collect(Collectors.toSet());
+
+        for (String userId : allUserIds) {
+            if (!traits.getUserId().contains(userId)) {
+                traits.getUserId().add(userId);
+                log.debug("  👤 Added user_id: {}", userId);
+            }
         }
 
-        if (sourceTraits.getGender() != null) {
-            traits.setGender(sourceTraits.getGender());
-            log.debug("  📝 Updated gender: {}", traits.getGender());
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // SINGLE-VALUE FIELDS from NEWEST profile
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        ProfileModel.TraitsModel newestTraits = newestProfile.getTraits();
+        if (newestTraits == null) return;
+
+        if (newestTraits.getFullName() != null) {
+            traits.setFullName(newestTraits.getFullName());
+            log.debug("   Updated fullName from newest: {}", traits.getFullName());
         }
 
-        if (sourceTraits.getDob() != null) {
-            traits.setDob(sourceTraits.getDob());
-            log.debug("  📝 Updated dob: {}", traits.getDob());
+        if (newestTraits.getFirstName() != null) {
+            traits.setFirstName(newestTraits.getFirstName());
+            log.debug("   Updated firstName from newest: {}", traits.getFirstName());
         }
 
-        if (sourceTraits.getAddress() != null) {
-            traits.setAddress(sourceTraits.getAddress());
-            log.debug("  📝 Updated address: {}", traits.getAddress());
+        if (newestTraits.getLastName() != null) {
+            traits.setLastName(newestTraits.getLastName());
+            log.debug("   Updated lastName from newest: {}", traits.getLastName());
         }
 
-        if (sourceTraits.getIdcard() != null) {
-            traits.setIdcard(sourceTraits.getIdcard());
-            log.debug("  📝 Updated idcard: {}", traits.getIdcard());
+        if (newestTraits.getGender() != null) {
+            traits.setGender(newestTraits.getGender());
+            log.debug("   Updated gender from newest: {}", traits.getGender());
         }
 
-        if (sourceTraits.getOldIdcard() != null) {
-            traits.setOldIdcard(sourceTraits.getOldIdcard());
-            log.debug("  📝 Updated oldIdcard: {}", traits.getOldIdcard());
+        if (newestTraits.getDob() != null) {
+            traits.setDob(newestTraits.getDob());
+            log.debug("   Updated dob from newest: {}", traits.getDob());
         }
 
-        if (sourceTraits.getReligion() != null) {
-            traits.setReligion(sourceTraits.getReligion());
-            log.debug("  📝 Updated religion: {}", traits.getReligion());
+        if (newestTraits.getAddress() != null) {
+            traits.setAddress(newestTraits.getAddress());
+            log.debug("   Updated address from newest: {}", traits.getAddress());
         }
 
-        // ✅ Email and Phone - ALWAYS update
-        if (sourceTraits.getEmail() != null) {
-            traits.setEmail(sourceTraits.getEmail());
-            log.debug("  📧 Updated email: {}", traits.getEmail());
+        //  NEW: Update idcard, oldIdcard, religion
+        if (newestTraits.getIdcard() != null) {
+            traits.setIdcard(newestTraits.getIdcard());
+            log.debug("   Updated idcard from newest: {}", traits.getIdcard());
         }
 
-        if (sourceTraits.getPhone() != null) {
-            traits.setPhone(sourceTraits.getPhone());
-            log.debug("  📱 Updated phone: {}", traits.getPhone());
+        if (newestTraits.getOldIdcard() != null) {
+            traits.setOldIdcard(newestTraits.getOldIdcard());
+            log.debug("   Updated oldIdcard from newest: {}", traits.getOldIdcard());
         }
+
+        if (newestTraits.getReligion() != null) {
+            traits.setReligion(newestTraits.getReligion());
+            log.debug("   Updated religion from newest: {}", traits.getReligion());
+        }
+
+        log.info("   Master traits updated: {} emails, {} phones, {} user_ids",
+                traits.getEmail().size(),
+                traits.getPhone().size(),
+                traits.getUserId().size());
     }
 
-    /**
-     * ✅ NEW: Update master platforms from newest profile
+
+    /*
+     *  NEW: Update master platforms from newest profile
      */
     private void updateMasterPlatformsWithPriority(
             MasterProfileDocument master,
             Profile newestProfile) {
 
-        // ✅ FIX: Use ProfileModel.PlatformsModel (interface)
+        //  FIX: Use ProfileModel.PlatformsModel (interface)
         ProfileModel.PlatformsModel sourcePlatforms = newestProfile.getPlatforms();
 
         if (sourcePlatforms == null) {
@@ -507,7 +542,7 @@ public class ProfileMergeService {
             MasterProfileDocument master,
             Profile newestProfile) {
 
-        // ✅ FIX: Use ProfileModel.CampaignModel (interface)
+        //  FIX: Use ProfileModel.CampaignModel (interface)
         ProfileModel.CampaignModel sourceCampaign = newestProfile.getCampaign();
 
         if (sourceCampaign == null) {
@@ -582,7 +617,7 @@ public class ProfileMergeService {
             mergeTraitsFromMaster(primaryMaster, master);
         }
 
-        // ✅ NEW: Calculate newest last_seen_at from all masters + new profiles
+        //  NEW: Calculate newest last_seen_at from all masters + new profiles
         Instant newestLastSeenAt = Stream.concat(
                         existingMasters.stream().map(MasterProfileDocument::getLastSeenAt),
                         newProfiles.stream().map(Profile::getLastSeenAt)
@@ -591,7 +626,7 @@ public class ProfileMergeService {
                 .max(Instant::compareTo)
                 .orElse(Instant.now());
 
-        primaryMaster.setLastSeenAt(newestLastSeenAt);  // ✅ Update to newest
+        primaryMaster.setLastSeenAt(newestLastSeenAt);  //  Update to newest
         primaryMaster.setUpdatedAt(Instant.now());
         primaryMaster.setVersion(
                 primaryMaster.getVersion() != null ? primaryMaster.getVersion() + 1 : 1
@@ -599,7 +634,7 @@ public class ProfileMergeService {
 
         MasterProfileDocument saved = masterProfileRepo.save(primaryMaster);
 
-        log.info("  ✅ Primary master saved with {} profiles", saved.getMergedProfileIds().size());
+        log.info("   Primary master saved with {} profiles", saved.getMergedProfileIds().size());
 
         for (MasterProfileDocument master : existingMasters) {
             if (!master.getMasterId().equals(primaryMaster.getMasterId())) {
@@ -678,7 +713,7 @@ public class ProfileMergeService {
                     doc.setUpdatedAt(Instant.now());
 
                     profileRepo.save(doc);
-                    log.debug("    ✅ Marked as merged: {}", profileId);
+                    log.debug("     Marked as merged: {}", profileId);
                 }
             } catch (Exception ex) {
                 log.error("    ❌ Failed to mark profile as merged: {}",
@@ -720,7 +755,7 @@ public class ProfileMergeService {
         List<MasterProfileDocument> allMasters = masterProfileRepo.findByTenantId(tenantId);
 
         if (allMasters.size() < 2) {
-            log.info("  ✅ No conflicts (only {} masters)", allMasters.size());
+            log.info("   No conflicts (only {} masters)", allMasters.size());
             return 0;
         }
 
@@ -729,14 +764,18 @@ public class ProfileMergeService {
         for (MasterProfileDocument master : allMasters) {
             if (master.getTraits() == null) continue;
 
-            if (master.getTraits().getEmail() != null) {
-                String key = "email:" + master.getTraits().getEmail();
-                groups.computeIfAbsent(key, k -> new ArrayList<>()).add(master);
+            if (master.getTraits().getEmail() != null && !master.getTraits().getEmail().isEmpty()) {
+                for (String email : master.getTraits().getEmail()) {
+                    String key = "email:" + email;
+                    groups.computeIfAbsent(key, k -> new ArrayList<>()).add(master);
+                }
             }
 
-            if (master.getTraits().getPhone() != null) {
-                String key = "phone:" + master.getTraits().getPhone();
-                groups.computeIfAbsent(key, k -> new ArrayList<>()).add(master);
+            if (master.getTraits().getPhone() != null && !master.getTraits().getPhone().isEmpty()) {
+                for (String phone : master.getTraits().getPhone()) {
+                    String key = "phone:" + phone;
+                    groups.computeIfAbsent(key, k -> new ArrayList<>()).add(master);
+                }
             }
         }
 
@@ -771,7 +810,7 @@ public class ProfileMergeService {
             }
         }
 
-        log.info("  ✅ Resolved {} conflicts", mergedCount);
+        log.info("   Resolved {} conflicts", mergedCount);
         return mergedCount;
     }
 
@@ -834,12 +873,12 @@ public class ProfileMergeService {
     }
 
     public MasterProfile getMasterProfile(String masterProfileId) {
-        // ✅ FIX: Use findByMasterId instead of findAll + filter
+        //  FIX: Use findByMasterId instead of findAll + filter
         MasterProfileDocument doc = masterProfileRepo.findByMasterId(masterProfileId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Master profile not found: " + masterProfileId));
 
-        log.info("✅ Found master profile: masterId={}, mergedCount={}",
+        log.info(" Found master profile: masterId={}, mergedCount={}",
                 masterProfileId, doc.getMergeCount());
 
         return MasterProfileMapper.toDomain(doc);

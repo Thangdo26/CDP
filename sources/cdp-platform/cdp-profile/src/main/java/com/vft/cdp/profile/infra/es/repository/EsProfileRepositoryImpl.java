@@ -69,11 +69,8 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
         ProfileDocument document = esOps.get(id, ProfileDocument.class);
 
         if (document == null) {
-            log.debug("❌ Profile not found: {}", id);
             return Optional.empty();
         }
-
-        log.debug("✅ Profile found: {}", id);
 
         return Optional.of(ProfileMapper.toDomain(document));
     }

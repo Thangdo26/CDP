@@ -40,7 +40,6 @@ public class EsMasterProfileRepositoryImpl implements MasterProfileRepository {
 
     @Override
     public Optional<MasterProfile> findById(String masterId) {
-        log.debug("Finding master profile by ID: {}", masterId);
         return springDataRepo.findByMasterId(masterId)
                 .map(MasterProfileMapper::toDomain);
     }

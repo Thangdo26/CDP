@@ -53,6 +53,9 @@ public interface MasterProfileModel {
         String getCountry();
         String getCity();
         String getAddress();
+        String getIdcard();
+        String getOldIdcard();
+        String getReligion();
         Double getLastPurchaseAmount();
         Instant getLastPurchaseAt();
     }
