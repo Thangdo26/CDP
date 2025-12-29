@@ -66,8 +66,6 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
     public Optional<ProfileModel> find(String tenantId, String appId, String userId) {
         String id = ProfileMapper.buildId(tenantId, appId, userId);
 
-        log.debug("🔍 Finding profile: id={}", id);
-
         ProfileDocument document = esOps.get(id, ProfileDocument.class);
 
         if (document == null) {

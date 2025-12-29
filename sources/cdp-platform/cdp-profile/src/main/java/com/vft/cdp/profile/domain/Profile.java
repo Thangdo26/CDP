@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import java.util.Objects;
@@ -185,53 +186,135 @@ public class Profile implements ProfileModel {
         }
 
         boolean hasChanges = false;
-        String reactivatedFromMasterId = null;  // ✅ Track masterId before clearing
+        String reactivatedFromMasterId = null;
 
-        // Check and merge traits
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // CHECK AND MERGE TRAITS
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
         if (newTraits != null) {
             Traits mergedTraits = mergeTraits(this.traits, newTraits);
 
-            // ✅ Check if traits actually changed
             if (!traitsEquals(this.traits, mergedTraits)) {
                 this.traits = mergedTraits;
                 hasChanges = true;
+                log.debug("  ✏️  Traits changed");
             }
         }
 
-        // Check and update platforms
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // CHECK AND UPDATE PLATFORMS
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
         if (newPlatforms != null && !platformsEquals(this.platforms, newPlatforms)) {
             this.platforms = newPlatforms;
             hasChanges = true;
+            log.debug("  ✏️  Platforms changed");
         }
 
-        // Check and update campaign
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // CHECK AND UPDATE CAMPAIGN
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
         if (newCampaign != null && !campaignEquals(this.campaign, newCampaign)) {
             this.campaign = newCampaign;
             hasChanges = true;
+            log.debug("  ✏️  Campaign changed");
         }
 
-        // ✅ AUTO-REACTIVATE: If data changed and status is MERGED, set to ACTIVE
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // AUTO-REACTIVATE IF DATA CHANGED
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
         if (hasChanges && this.status == ProfileStatus.MERGED) {
             log.info("🔄 Profile data changed - auto-reactivating from MERGED to ACTIVE: {}|{}|{}",
                     this.tenantId, this.appId, this.userId);
 
-            // Save masterId before clearing (for cleanup)
             reactivatedFromMasterId = this.mergedToMasterId;
-
-            // Clear merge status
             this.status = ProfileStatus.ACTIVE;
             this.mergedToMasterId = null;
             this.mergedAt = null;
         }
 
-        // Update timestamps and version if any changes
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // UPDATE TIMESTAMPS - ONLY IF DATA CHANGED
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
         if (hasChanges) {
             this.updatedAt = Instant.now();
-            this.lastSeenAt = Instant.now();
             this.version = (this.version != null ? this.version : 0) + 1;
+
+            // ✅ NOTE: last_seen_at/first_seen_at KHÔNG tự động update ở đây
+            // Chúng được extract từ metadata trong ProfileService
+
+            log.debug("  📅 Updated timestamps: updatedAt={}, version={}",
+                    this.updatedAt, this.version);
         }
 
-        return reactivatedFromMasterId;  // ✅ Return masterId for cleanup (or null)
+        return reactivatedFromMasterId;
+    }
+
+    /**
+     * ✅ NEW: Update metadata and extract timestamps
+     *
+     * Call this AFTER update() to handle metadata changes
+     */
+    public void updateMetadata(Map<String, Object> newMetadata) {
+        if (newMetadata == null || newMetadata.isEmpty()) {
+            return;
+        }
+
+        // Merge metadata
+        if (this.metadata == null) {
+            this.metadata = new HashMap<>();
+        }
+
+        this.metadata.putAll(newMetadata);
+
+        // ✅ Extract last_seen_at from metadata
+        if (newMetadata.containsKey("last_seen_at")) {
+            Object lastSeenObj = newMetadata.get("last_seen_at");
+            if (lastSeenObj != null) {
+                this.lastSeenAt = parseTimestamp(lastSeenObj);
+            }
+        }
+
+        // ✅ Extract first_seen_at from metadata
+        if (newMetadata.containsKey("first_seen_at")) {
+            Object firstSeenObj = newMetadata.get("first_seen_at");
+            if (firstSeenObj != null) {
+                Instant newFirstSeen = parseTimestamp(firstSeenObj);
+
+                // Only update if earlier than current
+                if (this.firstSeenAt == null || newFirstSeen.isBefore(this.firstSeenAt)) {
+                    this.firstSeenAt = newFirstSeen;
+                }
+            }
+        }
+    }
+
+    /**
+     * Helper: Parse timestamp from various formats
+     */
+    private Instant parseTimestamp(Object obj) {
+        if (obj instanceof Instant) {
+            return (Instant) obj;
+        }
+
+        if (obj instanceof String) {
+            try {
+                return Instant.parse((String) obj);
+            } catch (Exception e) {
+                log.warn("Failed to parse timestamp: {}", obj);
+                return Instant.now();
+            }
+        }
+
+        if (obj instanceof Long) {
+            return Instant.ofEpochMilli((Long) obj);
+        }
+
+        return Instant.now();
     }
 
     /**
@@ -294,6 +377,8 @@ public class Profile implements ProfileModel {
             Map<String, Object> metadata) {
 
         Instant now = Instant.now();
+        Instant firstSeenAt = extractTimestampFromMetadata(metadata, "first_seen_at", now);
+        Instant lastSeenAt = extractTimestampFromMetadata(metadata, "last_seen_at", now);
 
         return Profile.builder()
                 .tenantId(tenantId)
@@ -307,14 +392,42 @@ public class Profile implements ProfileModel {
                 .metadata(metadata)
                 .createdAt(now)
                 .updatedAt(now)
-                .firstSeenAt(now)
-                .lastSeenAt(now)
+                .firstSeenAt(firstSeenAt)
+                .lastSeenAt(lastSeenAt)
                 .version(1)
                 .build();
     }
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// EQUALITY CHECKS (for change detection)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private static Instant extractTimestampFromMetadata(
+            Map<String, Object> metadata,
+            String key,
+            Instant defaultValue) {
+
+        if (metadata == null || !metadata.containsKey(key)) {
+            return defaultValue;
+        }
+
+        Object value = metadata.get(key);
+
+        if (value instanceof Instant) {
+            return (Instant) value;
+        }
+
+        if (value instanceof String) {
+            try {
+                return Instant.parse((String) value);
+            } catch (Exception e) {
+                log.warn("Failed to parse {} from metadata: {}", key, value);
+                return defaultValue;
+            }
+        }
+
+        if (value instanceof Long) {
+            return Instant.ofEpochMilli((Long) value);
+        }
+
+        return defaultValue;
+    }
 
     /**
      * Check if two Traits objects are equal

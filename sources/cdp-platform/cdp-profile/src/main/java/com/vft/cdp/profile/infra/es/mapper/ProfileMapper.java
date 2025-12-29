@@ -60,8 +60,6 @@ public final class ProfileMapper {
                 .metadata(profile.getMetadata())
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())
-                .firstSeenAt(profile.getFirstSeenAt())
-                .lastSeenAt(profile.getLastSeenAt())
                 .version(profile.getVersion())
                 .build();
     }
@@ -89,8 +87,6 @@ public final class ProfileMapper {
                 .metadata(model.getMetadata())
                 .createdAt(model.getCreatedAt())
                 .updatedAt(model.getUpdatedAt())
-                .firstSeenAt(model.getFirstSeenAt())
-                .lastSeenAt(model.getLastSeenAt())
                 .version(model.getVersion())
                 .build();
     }
@@ -119,8 +115,6 @@ public final class ProfileMapper {
                 .metadata(doc.getMetadata())
                 .createdAt(doc.getCreatedAt())
                 .updatedAt(doc.getUpdatedAt())
-                .firstSeenAt(doc.getFirstSeenAt())
-                .lastSeenAt(doc.getLastSeenAt())
                 .version(doc.getVersion())
                 .build();
     }

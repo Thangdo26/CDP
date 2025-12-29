@@ -75,6 +75,8 @@ public class MasterProfile implements MasterProfileModel {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private MasterTraits traits;
+    private MasterPlatforms platforms;
+    private MasterCampaign campaign;
 
     @Builder.Default
     private List<String> segments = new ArrayList<>();
@@ -142,6 +144,17 @@ public class MasterProfile implements MasterProfileModel {
     @Override
     public MasterProfileModel.MasterTraitsModel getTraits() {
         return this.traits;
+    }
+
+    @Override
+    public MasterProfileModel.PlatformsModel getPlatforms() {
+        return this.platforms;
+    }
+
+    // ✅ ADD: Implement getCampaigns()
+    @Override
+    public MasterProfileModel.CampaignModel getCampaigns() {
+        return this.campaign;
     }
 
     @Override
@@ -248,6 +261,24 @@ public class MasterProfile implements MasterProfileModel {
             log.debug("  🔄 Updated traits from newer profile");
         }
 
+        // ADD: Merge platforms
+        if (this.platforms == null && profile.getPlatforms() != null && isNewer) {
+            this.platforms = convertPlatforms(profile.getPlatforms());
+            log.debug("  📱 Added platforms from newer profile");
+        } else if (profile.getPlatforms() != null && isNewer) {
+            this.platforms = mergePlatforms(this.platforms, profile.getPlatforms());
+            log.debug("  🔄 Updated platforms from newer profile");
+        }
+
+        // ADD: Merge campaign
+        if (this.campaign == null && profile.getCampaign() != null && isNewer) {
+            this.campaign = convertCampaign(profile.getCampaign());
+            log.debug("  🎯 Added campaign from newer profile");
+        } else if (profile.getCampaign() != null && isNewer) {
+            this.campaign = mergeCampaign(this.campaign, profile.getCampaign());
+            log.debug("  🔄 Updated campaign from newer profile");
+        }
+
         // Update timestamps
         this.updatedAt = Instant.now();
 
@@ -310,6 +341,73 @@ public class MasterProfile implements MasterProfileModel {
     }
 
     /**
+     * ✅ NEW: Merge platforms - prefer incoming if not null
+     */
+    private MasterPlatforms mergePlatforms(MasterPlatforms existing, ProfileModel.PlatformsModel incoming) {
+        if (incoming == null) return existing;
+        if (existing == null) return convertPlatforms(incoming);
+
+        MasterPlatforms result = new MasterPlatforms();
+
+        result.setOs(incoming.getOs() != null ? incoming.getOs() : existing.getOs());
+        result.setDevice(incoming.getDevice() != null ? incoming.getDevice() : existing.getDevice());
+        result.setBrowser(incoming.getBrowser() != null ? incoming.getBrowser() : existing.getBrowser());
+        result.setAppVersion(incoming.getAppVersion() != null ? incoming.getAppVersion() : existing.getAppVersion());
+
+        return result;
+    }
+
+    /**
+     * ✅ NEW: Convert ProfileModel.PlatformsModel to MasterPlatforms
+     */
+    private static MasterPlatforms convertPlatforms(ProfileModel.PlatformsModel source) {
+        if (source == null) return null;
+
+        return MasterPlatforms.builder()
+                .os(source.getOs())
+                .device(source.getDevice())
+                .browser(source.getBrowser())
+                .appVersion(source.getAppVersion())
+                .build();
+    }
+
+    /**
+     * ✅ NEW: Merge campaign - prefer incoming if not null
+     */
+    private MasterCampaign mergeCampaign(MasterCampaign existing, ProfileModel.CampaignModel incoming) {
+        if (incoming == null) return existing;
+        if (existing == null) return convertCampaign(incoming);
+
+        MasterCampaign result = new MasterCampaign();
+
+        result.setUtmSource(incoming.getUtmSource() != null ? incoming.getUtmSource() : existing.getUtmSource());
+        result.setUtmCampaign(incoming.getUtmCampaign() != null ? incoming.getUtmCampaign() : existing.getUtmCampaign());
+        result.setUtmMedium(incoming.getUtmMedium() != null ? incoming.getUtmMedium() : existing.getUtmMedium());
+        result.setUtmContent(incoming.getUtmContent() != null ? incoming.getUtmContent() : existing.getUtmContent());
+        result.setUtmTerm(incoming.getUtmTerm() != null ? incoming.getUtmTerm() : existing.getUtmTerm());
+        result.setUtmCustom(incoming.getUtmCustom() != null ? incoming.getUtmCustom() : existing.getUtmCustom());
+
+        return result;
+    }
+
+    /**
+     * ✅ NEW: Convert ProfileModel.CampaignModel to MasterCampaign
+     */
+    private static MasterCampaign convertCampaign(ProfileModel.CampaignModel source) {
+        if (source == null) return null;
+
+        return MasterCampaign.builder()
+                .utmSource(source.getUtmSource())
+                .utmCampaign(source.getUtmCampaign())
+                .utmMedium(source.getUtmMedium())
+                .utmContent(source.getUtmContent())
+                .utmTerm(source.getUtmTerm())
+                .utmCustom(source.getUtmCustom())
+                .build();
+    }
+
+
+    /**
      * Factory method to create master profile from first profile
      */
     public static MasterProfile createFromProfile(ProfileModel profile, String masterId) {
@@ -322,6 +420,8 @@ public class MasterProfile implements MasterProfileModel {
                 .mergedIds(new ArrayList<>(List.of(buildProfileId(profile))))
                 .deviceId(new ArrayList<>())
                 .traits(convertTraits(profile.getTraits()))
+                .platforms(convertPlatforms(profile.getPlatforms()))  // ✅ ADD
+                .campaign(convertCampaign(profile.getCampaign()))      // ✅ ADD
                 .segments(new ArrayList<>())
                 .scores(new HashMap<>())
                 .consents(new HashMap<>())
@@ -391,6 +491,32 @@ public class MasterProfile implements MasterProfileModel {
         private String address;
         private Double lastPurchaseAmount;
         private Instant lastPurchaseAt;
+    }
+
+    // ✅ NEW: Add Platforms
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class MasterPlatforms implements MasterProfileModel.PlatformsModel {
+        private String os;
+        private String device;
+        private String browser;
+        private String appVersion;
+    }
+
+    // ✅ NEW: Add Campaign
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class MasterCampaign implements MasterProfileModel.CampaignModel {
+        private String utmSource;
+        private String utmCampaign;
+        private String utmMedium;
+        private String utmContent;
+        private String utmTerm;
+        private String utmCustom;
     }
 
     @Data

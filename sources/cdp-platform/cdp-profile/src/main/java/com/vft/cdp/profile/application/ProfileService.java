@@ -47,8 +47,6 @@ public class ProfileService {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     public ProfileDTO createProfile(CreateProfileCommand command) {
-        log.info("📝 Creating profile: tenant={}, app={}, user={}",
-                command.getTenantId(), command.getAppId(), command.getUserId());
 
         Optional<ProfileModel> existingOpt = profileRepository.find(
                 command.getTenantId(),
@@ -57,7 +55,7 @@ public class ProfileService {
         );
 
         ProfileModel savedModel;
-        String reactivatedFromMasterId = null;  // ✅ Track masterId if reactivated
+        String reactivatedFromMasterId = null;
 
         if (existingOpt.isPresent()) {
             log.info("  ℹ️  Profile exists, merging...");
@@ -70,6 +68,9 @@ public class ProfileService {
                     mapCommandPlatformsToDomain(command.getPlatforms()),
                     mapCommandCampaignToDomain(command.getCampaign())
             );
+            if (command.getMetadata() != null && !command.getMetadata().isEmpty()) {
+                existing.updateMetadata(command.getMetadata());
+            }
 
             savedModel = profileRepository.save(existing);
 
@@ -90,7 +91,7 @@ public class ProfileService {
             savedModel = profileRepository.save(newProfile);
         }
 
-        // ✅ NEW: Cleanup master profile reference if profile was reactivated
+        // ✅ Cleanup master if reactivated
         if (reactivatedFromMasterId != null) {
             cleanupMasterProfileReference(
                     command.getTenantId(),
@@ -107,9 +108,7 @@ public class ProfileService {
                 savedModel
         );
 
-        ProfileDTO dto = ProfileDTOMapper.toDTO(savedModel);
-
-        return dto;
+        return ProfileDTOMapper.toDTO(savedModel);
     }
     private void cleanupMasterProfileReference(String tenantId, String appId, String userId, String masterId) {
         if (masterId == null || masterId.isBlank()) {
@@ -200,26 +199,21 @@ public class ProfileService {
 
         Profile profile = convertToDomain(existing);
 
-        // ✅ Call update and capture masterId if profile was reactivated
+        // ✅ 1. Update traits/platforms/campaign
         String reactivatedFromMasterId = profile.update(
                 mapCommandTraitsToDomain(command.getTraits()),
                 mapCommandPlatformsToDomain(command.getPlatforms()),
                 mapCommandCampaignToDomain(command.getCampaign())
         );
 
-        // Merge metadata if provided
+        // ✅ 2. Update metadata (including timestamps)
         if (command.getMetadata() != null && !command.getMetadata().isEmpty()) {
-            Map<String, Object> merged = new HashMap<>();
-            if (profile.getMetadata() != null) {
-                merged.putAll(profile.getMetadata());
-            }
-            merged.putAll(command.getMetadata());
-            profile.setMetadata(merged);
+            profile.updateMetadata(command.getMetadata());
         }
 
         ProfileModel saved = profileRepository.save(profile);
 
-        // ✅ NEW: Cleanup master profile reference if profile was reactivated
+        // ✅ Cleanup master if reactivated
         if (reactivatedFromMasterId != null) {
             cleanupMasterProfileReference(
                     command.getTenantId(),

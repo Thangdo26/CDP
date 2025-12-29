@@ -41,10 +41,6 @@ public class ProfileInboundProcessor {
             return;
         }
 
-        log.info("📨 Received RawProfile from Kafka: tenant={}, app={}, user={}",
-                rawProfile.getTenantId(),
-                rawProfile.getAppId(),
-                rawProfile.getUserId());
 
         try {
             // 1. Convert RawProfile → CreateProfileCommand
@@ -52,11 +48,6 @@ public class ProfileInboundProcessor {
 
             // 2. Use ProfileService to create/update
             ProfileDTO saved = profileService.createProfile(command);
-
-            log.info("✅ Profile saved to ES: {}|{}|{}",
-                    saved.getTenantId(),
-                    saved.getAppId(),
-                    saved.getUserId());
 
         } catch (Exception ex) {
             log.error("❌ Failed to process RawProfile: tenant={}, app={}, user={}",

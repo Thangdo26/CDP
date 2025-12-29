@@ -24,6 +24,8 @@ public interface MasterProfileModel {
     List<String> getDeviceId();
     List<String> getMergedIds();
     MasterTraitsModel getTraits();
+    PlatformsModel getPlatforms();      // ✅ ADD
+    CampaignModel getCampaigns();
     List<String> getSegments();
     Map<String, Double> getScores();
     Map<String, ConsentModel> getConsents();
@@ -59,5 +61,22 @@ public interface MasterProfileModel {
         String getStatus();
         Instant getUpdatedAt();
         String getSource();
+    }
+
+    // ✅ NEW: Nested interfaces
+    interface PlatformsModel {
+        String getOs();
+        String getDevice();
+        String getBrowser();
+        String getAppVersion();
+    }
+
+    interface CampaignModel {
+        String getUtmSource();
+        String getUtmCampaign();
+        String getUtmMedium();
+        String getUtmContent();
+        String getUtmTerm();
+        String getUtmCustom();
     }
 }

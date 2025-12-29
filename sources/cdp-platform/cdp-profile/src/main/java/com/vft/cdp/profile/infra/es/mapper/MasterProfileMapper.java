@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
+
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * MASTER PROFILE MAPPER - CORRECTED
@@ -195,7 +196,6 @@ public final class MasterProfileMapper {
 
         String docId = buildMasterDocId(
                 master.getTenantId(),
-//                master.getAppId().isEmpty() ? "default" : master.getAppId().get(0),
                 master.getProfileId()
         );
 
@@ -207,9 +207,12 @@ public final class MasterProfileMapper {
                 .status(master.getStatus())
                 .mergedProfileIds(master.getMergedIds())
                 .mergeCount(master.getMergedIds() != null ? master.getMergedIds().size() : 0)
+
+                // ✅ FIXED: Map platforms and campaign (not null!)
                 .traits(mapTraitsToDoc(master.getTraits()))
-                .platforms(null)
-                .campaign(null)
+                .platforms(mapPlatformsToDoc(master.getPlatforms()))  // ✅ NEW
+                .campaign(mapCampaignToDoc(master.getCampaign()))      // ✅ NEW
+
                 .metadata(new HashMap<>())
                 .createdAt(master.getCreatedAt())
                 .updatedAt(master.getUpdatedAt())
@@ -250,6 +253,37 @@ public final class MasterProfileMapper {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // HELPER METHODS
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private static MasterProfileDocument.Platforms mapPlatformsToDoc(
+            com.vft.cdp.profile.application.model.MasterProfileModel.PlatformsModel platforms) {
+
+        if (platforms == null) return null;
+
+        return MasterProfileDocument.Platforms.builder()
+                .os(platforms.getOs())
+                .device(platforms.getDevice())
+                .browser(platforms.getBrowser())
+                .appVersion(platforms.getAppVersion())
+                .build();
+    }
+
+    /**
+     * ✅ NEW: Map campaign to document
+     */
+    private static MasterProfileDocument.Campaign mapCampaignToDoc(
+            com.vft.cdp.profile.application.model.MasterProfileModel.CampaignModel campaign) {
+
+        if (campaign == null) return null;
+
+        return MasterProfileDocument.Campaign.builder()
+                .utmSource(campaign.getUtmSource())
+                .utmCampaign(campaign.getUtmCampaign())
+                .utmMedium(campaign.getUtmMedium())
+                .utmContent(campaign.getUtmContent())
+                .utmTerm(campaign.getUtmTerm())
+                .utmCustom(campaign.getUtmCustom())
+                .build();
+    }
 
     // Overload for MasterProfile.MasterTraits (concrete class)
     private static MasterProfileDocument.Traits mapTraitsToDoc(MasterProfile.MasterTraits traits) {

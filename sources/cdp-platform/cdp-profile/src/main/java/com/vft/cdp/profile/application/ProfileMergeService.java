@@ -8,6 +8,7 @@ import com.vft.cdp.profile.infra.es.SpringDataProfileRepository;
 import com.vft.cdp.profile.infra.es.document.MasterProfileDocument;
 import com.vft.cdp.profile.infra.es.document.ProfileDocument;
 import com.vft.cdp.profile.infra.es.mapper.ProfileMapper;
+import com.vft.cdp.profile.application.model.ProfileModel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -302,30 +303,69 @@ public class ProfileMergeService {
 
         log.info("  ➕ Adding {} new profiles", toAdd.size());
 
+        // Update merged IDs
         List<String> updatedMergedIds = new ArrayList<>(currentMergedIds);
         updatedMergedIds.addAll(toAdd);
         existingMaster.setMergedProfileIds(updatedMergedIds);
         existingMaster.setMergeCount(updatedMergedIds.size());
 
-        // ✅ NEW: Update traits with priority to most recent profile
-        updateMasterTraitsWithPriority(existingMaster, newProfiles);
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // ✅ FIX: Combine ALL profiles (existing + new) for comparison
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        // ✅ NEW: Update last_seen_at from newest profile
-        Instant newestLastSeenAt = newProfiles.stream()
-                .map(Profile::getLastSeenAt)
-                .filter(Objects::nonNull)
-                .max(Instant::compareTo)
-                .orElse(null);
+        // Get ALL merged profiles
+        List<Profile> allMergedProfiles = new ArrayList<>(newProfiles);
 
-        if (newestLastSeenAt != null) {
-            // Update if newer than current
-            if (existingMaster.getLastSeenAt() == null ||
-                    newestLastSeenAt.isAfter(existingMaster.getLastSeenAt())) {
-                existingMaster.setLastSeenAt(newestLastSeenAt);
-                log.info("  📅 Updated last_seen_at: {}", newestLastSeenAt);
-            }
+        // Add existing merged profiles (if we can load them)
+        if (currentMergedIds != null && !currentMergedIds.isEmpty()) {
+            List<Profile> existingProfiles = loadProfiles(currentMergedIds);
+            allMergedProfiles.addAll(existingProfiles);
         }
 
+        // ✅ Find the ABSOLUTE newest profile across ALL profiles
+        Profile newestProfile = allMergedProfiles.stream()
+                .max(Comparator.comparing(
+                        p -> p.getLastSeenAt() != null ? p.getLastSeenAt() : Instant.MIN
+                ))
+                .orElse(newProfiles.get(0));
+
+        Instant newestLastSeenAt = newestProfile.getLastSeenAt();
+
+        log.info("  🔍 Newest profile: userId={}, last_seen_at={}",
+                newestProfile.getUserId(), newestLastSeenAt);
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // ✅ FIX: Only update if incoming profile is NEWER than master
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        boolean shouldUpdate = false;
+
+        if (existingMaster.getLastSeenAt() == null) {
+            shouldUpdate = true;
+            log.info("  ✅ Master has no last_seen_at, will update");
+
+        } else if (newestLastSeenAt != null &&
+                newestLastSeenAt.isAfter(existingMaster.getLastSeenAt())) {
+            shouldUpdate = true;
+            log.info("  ✅ Newest profile is NEWER than master: {} > {}",
+                    newestLastSeenAt, existingMaster.getLastSeenAt());
+
+        } else {
+            log.info("  ⏭️  Newest profile is OLDER than or EQUAL to master, skip trait update");
+        }
+
+        // ✅ Update traits/platforms/campaign if newer
+        if (shouldUpdate) {
+            updateMasterTraitsWithPriority(existingMaster, newestProfile);
+            updateMasterPlatformsWithPriority(existingMaster, newestProfile);
+            updateMasterCampaignWithPriority(existingMaster, newestProfile);
+
+            // Update last_seen_at
+            existingMaster.setLastSeenAt(newestLastSeenAt);
+            log.info("  📅 Updated last_seen_at: {}", newestLastSeenAt);
+        }
+
+        // Always update metadata
         existingMaster.setUpdatedAt(Instant.now());
         existingMaster.setVersion(
                 existingMaster.getVersion() != null ? existingMaster.getVersion() + 1 : 1
@@ -333,89 +373,180 @@ public class ProfileMergeService {
 
         MasterProfileDocument saved = masterProfileRepo.save(existingMaster);
 
-        log.info("  ✅ Master updated: {} profiles now", saved.getMergedProfileIds().size());
+        log.info("  ✅ Master updated: {} profiles, version={}",
+                saved.getMergedProfileIds().size(), saved.getVersion());
 
         markProfilesAsMerged(newProfiles, saved.getMasterId());
 
         return saved.getMasterId();
     }
 
+    /**
+     * ✅ FIXED: Update master traits from NEWEST profile
+     *
+     * Strategy: ALWAYS update ALL fields from newest profile
+     * No more "only if null" logic
+     */
     private void updateMasterTraitsWithPriority(
             MasterProfileDocument master,
-            List<Profile> newProfiles) {
+            Profile newestProfile) {
 
         if (master.getTraits() == null) {
             master.setTraits(new MasterProfileDocument.Traits());
         }
 
-        // ✅ NEW: Sort profiles by last_seen_at DESC (newest first)
-        List<Profile> sortedProfiles = newProfiles.stream()
-                .sorted((p1, p2) -> {
-                    Instant t1 = p1.getLastSeenAt();
-                    Instant t2 = p2.getLastSeenAt();
+        // ✅ FIX: Use ProfileModel.TraitsModel (interface) instead of Profile.Traits
+        ProfileModel.TraitsModel sourceTraits = newestProfile.getTraits();
 
-                    if (t1 == null && t2 == null) return 0;
-                    if (t1 == null) return 1;  // null last
-                    if (t2 == null) return -1; // null last
-
-                    return t2.compareTo(t1);  // DESC: newest first
-                })
-                .collect(Collectors.toList());
+        if (sourceTraits == null) {
+            return;
+        }
 
         MasterProfileDocument.Traits traits = master.getTraits();
 
-        // ✅ NEW: Iterate sorted profiles (newest first)
-        // First non-null value wins
-        for (Profile profile : sortedProfiles) {
-            if (profile.getTraits() == null) continue;
+        // ✅ UPDATE ALL FIELDS from newest profile
 
-            // Update single value fields (only if current is null OR prefer newest)
-            if (profile.getTraits().getFullName() != null && traits.getFullName() == null) {
-                traits.setFullName(profile.getTraits().getFullName());
-            }
-            if (profile.getTraits().getFirstName() != null && traits.getFirstName() == null) {
-                traits.setFirstName(profile.getTraits().getFirstName());
-            }
-            if (profile.getTraits().getLastName() != null && traits.getLastName() == null) {
-                traits.setLastName(profile.getTraits().getLastName());
-            }
-            if (profile.getTraits().getGender() != null && traits.getGender() == null) {
-                traits.setGender(profile.getTraits().getGender());
-            }
-            if (profile.getTraits().getDob() != null && traits.getDob() == null) {
-                traits.setDob(profile.getTraits().getDob());
-            }
-            if (profile.getTraits().getAddress() != null && traits.getAddress() == null) {
-                traits.setAddress(profile.getTraits().getAddress());
-            }
-            if (profile.getTraits().getIdcard() != null && traits.getIdcard() == null) {
-                traits.setIdcard(profile.getTraits().getIdcard());
-            }
-            if (profile.getTraits().getOldIdcard() != null && traits.getOldIdcard() == null) {
-                traits.setOldIdcard(profile.getTraits().getOldIdcard());
-            }
-            if (profile.getTraits().getReligion() != null && traits.getReligion() == null) {
-                traits.setReligion(profile.getTraits().getReligion());
-            }
+        if (sourceTraits.getFullName() != null) {
+            traits.setFullName(sourceTraits.getFullName());
+            log.debug("  📝 Updated fullName: {}", traits.getFullName());
         }
 
-        // ✅ For email and phone: always update to newest (even if not null)
-        Profile newestProfile = sortedProfiles.get(0);
-        if (newestProfile.getTraits() != null) {
-            if (newestProfile.getTraits().getEmail() != null) {
-                traits.setEmail(newestProfile.getTraits().getEmail());
-                log.debug("  📧 Updated email from newest profile: {}", traits.getEmail());
-            }
-            if (newestProfile.getTraits().getPhone() != null) {
-                traits.setPhone(newestProfile.getTraits().getPhone());
-                log.debug("  📱 Updated phone from newest profile: {}", traits.getPhone());
-            }
+        if (sourceTraits.getFirstName() != null) {
+            traits.setFirstName(sourceTraits.getFirstName());
+            log.debug("  📝 Updated firstName: {}", traits.getFirstName());
+        }
+
+        if (sourceTraits.getLastName() != null) {
+            traits.setLastName(sourceTraits.getLastName());
+            log.debug("  📝 Updated lastName: {}", traits.getLastName());
+        }
+
+        if (sourceTraits.getGender() != null) {
+            traits.setGender(sourceTraits.getGender());
+            log.debug("  📝 Updated gender: {}", traits.getGender());
+        }
+
+        if (sourceTraits.getDob() != null) {
+            traits.setDob(sourceTraits.getDob());
+            log.debug("  📝 Updated dob: {}", traits.getDob());
+        }
+
+        if (sourceTraits.getAddress() != null) {
+            traits.setAddress(sourceTraits.getAddress());
+            log.debug("  📝 Updated address: {}", traits.getAddress());
+        }
+
+        if (sourceTraits.getIdcard() != null) {
+            traits.setIdcard(sourceTraits.getIdcard());
+            log.debug("  📝 Updated idcard: {}", traits.getIdcard());
+        }
+
+        if (sourceTraits.getOldIdcard() != null) {
+            traits.setOldIdcard(sourceTraits.getOldIdcard());
+            log.debug("  📝 Updated oldIdcard: {}", traits.getOldIdcard());
+        }
+
+        if (sourceTraits.getReligion() != null) {
+            traits.setReligion(sourceTraits.getReligion());
+            log.debug("  📝 Updated religion: {}", traits.getReligion());
+        }
+
+        // ✅ Email and Phone - ALWAYS update
+        if (sourceTraits.getEmail() != null) {
+            traits.setEmail(sourceTraits.getEmail());
+            log.debug("  📧 Updated email: {}", traits.getEmail());
+        }
+
+        if (sourceTraits.getPhone() != null) {
+            traits.setPhone(sourceTraits.getPhone());
+            log.debug("  📱 Updated phone: {}", traits.getPhone());
         }
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ACTION 3: MERGE MULTIPLE MASTERS
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    /**
+     * ✅ NEW: Update master platforms from newest profile
+     */
+    private void updateMasterPlatformsWithPriority(
+            MasterProfileDocument master,
+            Profile newestProfile) {
+
+        // ✅ FIX: Use ProfileModel.PlatformsModel (interface)
+        ProfileModel.PlatformsModel sourcePlatforms = newestProfile.getPlatforms();
+
+        if (sourcePlatforms == null) {
+            return;
+        }
+
+        if (master.getPlatforms() == null) {
+            master.setPlatforms(new MasterProfileDocument.Platforms());
+        }
+
+        MasterProfileDocument.Platforms platforms = master.getPlatforms();
+
+        // Update all platform fields from newest profile
+        if (sourcePlatforms.getOs() != null) {
+            platforms.setOs(sourcePlatforms.getOs());
+        }
+
+        if (sourcePlatforms.getDevice() != null) {
+            platforms.setDevice(sourcePlatforms.getDevice());
+        }
+
+        if (sourcePlatforms.getBrowser() != null) {
+            platforms.setBrowser(sourcePlatforms.getBrowser());
+        }
+
+        if (sourcePlatforms.getAppVersion() != null) {
+            platforms.setAppVersion(sourcePlatforms.getAppVersion());
+        }
+
+        log.debug("  📱 Updated platforms from newest profile");
+    }
+
+    private void updateMasterCampaignWithPriority(
+            MasterProfileDocument master,
+            Profile newestProfile) {
+
+        // ✅ FIX: Use ProfileModel.CampaignModel (interface)
+        ProfileModel.CampaignModel sourceCampaign = newestProfile.getCampaign();
+
+        if (sourceCampaign == null) {
+            return;
+        }
+
+        if (master.getCampaign() == null) {
+            master.setCampaign(new MasterProfileDocument.Campaign());
+        }
+
+        MasterProfileDocument.Campaign campaign = master.getCampaign();
+
+        // Update all campaign fields from newest profile
+        if (sourceCampaign.getUtmSource() != null) {
+            campaign.setUtmSource(sourceCampaign.getUtmSource());
+        }
+
+        if (sourceCampaign.getUtmCampaign() != null) {
+            campaign.setUtmCampaign(sourceCampaign.getUtmCampaign());
+        }
+
+        if (sourceCampaign.getUtmMedium() != null) {
+            campaign.setUtmMedium(sourceCampaign.getUtmMedium());
+        }
+
+        if (sourceCampaign.getUtmContent() != null) {
+            campaign.setUtmContent(sourceCampaign.getUtmContent());
+        }
+
+        if (sourceCampaign.getUtmTerm() != null) {
+            campaign.setUtmTerm(sourceCampaign.getUtmTerm());
+        }
+
+        if (sourceCampaign.getUtmCustom() != null) {
+            campaign.setUtmCustom(sourceCampaign.getUtmCustom());
+        }
+
+        log.debug("  🎯 Updated campaign from newest profile");
+    }
 
     private String mergeMultipleMasters(
             List<MasterProfileDocument> existingMasters,
