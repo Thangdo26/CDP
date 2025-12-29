@@ -8,6 +8,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
+import java.util.Objects;
 
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -20,6 +22,7 @@ import java.util.Map;
  * ✅ Contains business logic
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
+@Slf4j
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -170,27 +173,65 @@ public class Profile implements ProfileModel {
 
     /**
      * Update profile data
+     *
+     * ✅ NEW: Auto-reactivate if data changed
+     * ✅ NEW: Returns masterId if profile was reactivated from MERGED status
+     *
+     * @return masterId if profile was reactivated, null otherwise
      */
-    public void update(Traits newTraits, Platforms newPlatforms, Campaign newCampaign) {
+    public String update(Traits newTraits, Platforms newPlatforms, Campaign newCampaign) {
         if (this.status == ProfileStatus.DELETED) {
             throw new IllegalStateException("Cannot update DELETED profile");
         }
 
+        boolean hasChanges = false;
+        String reactivatedFromMasterId = null;  // ✅ Track masterId before clearing
+
+        // Check and merge traits
         if (newTraits != null) {
-            this.traits = mergeTraits(this.traits, newTraits);
+            Traits mergedTraits = mergeTraits(this.traits, newTraits);
+
+            // ✅ Check if traits actually changed
+            if (!traitsEquals(this.traits, mergedTraits)) {
+                this.traits = mergedTraits;
+                hasChanges = true;
+            }
         }
 
-        if (newPlatforms != null) {
+        // Check and update platforms
+        if (newPlatforms != null && !platformsEquals(this.platforms, newPlatforms)) {
             this.platforms = newPlatforms;
+            hasChanges = true;
         }
 
-        if (newCampaign != null) {
+        // Check and update campaign
+        if (newCampaign != null && !campaignEquals(this.campaign, newCampaign)) {
             this.campaign = newCampaign;
+            hasChanges = true;
         }
 
-        this.updatedAt = Instant.now();
-        this.lastSeenAt = Instant.now();
-        this.version = (this.version != null ? this.version : 0) + 1;
+        // ✅ AUTO-REACTIVATE: If data changed and status is MERGED, set to ACTIVE
+        if (hasChanges && this.status == ProfileStatus.MERGED) {
+            log.info("🔄 Profile data changed - auto-reactivating from MERGED to ACTIVE: {}|{}|{}",
+                    this.tenantId, this.appId, this.userId);
+
+            // Save masterId before clearing (for cleanup)
+            reactivatedFromMasterId = this.mergedToMasterId;
+
+            // Clear merge status
+            this.status = ProfileStatus.ACTIVE;
+            this.mergedToMasterId = null;
+            this.mergedAt = null;
+        }
+
+        // Update timestamps and version if any changes
+        if (hasChanges) {
+            this.updatedAt = Instant.now();
+            this.lastSeenAt = Instant.now();
+            this.version = (this.version != null ? this.version : 0) + 1;
+        }
+
+        return reactivatedFromMasterId;  // ✅ Return masterId for cleanup (or null)
     }
 
     /**
@@ -270,5 +311,56 @@ public class Profile implements ProfileModel {
                 .lastSeenAt(now)
                 .version(1)
                 .build();
+    }
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// EQUALITY CHECKS (for change detection)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /**
+     * Check if two Traits objects are equal
+     */
+    private boolean traitsEquals(Traits t1, Traits t2) {
+        if (t1 == null && t2 == null) return true;
+        if (t1 == null || t2 == null) return false;
+
+        return Objects.equals(t1.getFullName(), t2.getFullName()) &&
+                Objects.equals(t1.getFirstName(), t2.getFirstName()) &&
+                Objects.equals(t1.getLastName(), t2.getLastName()) &&
+                Objects.equals(t1.getIdcard(), t2.getIdcard()) &&
+                Objects.equals(t1.getOldIdcard(), t2.getOldIdcard()) &&
+                Objects.equals(t1.getPhone(), t2.getPhone()) &&
+                Objects.equals(t1.getEmail(), t2.getEmail()) &&
+                Objects.equals(t1.getGender(), t2.getGender()) &&
+                Objects.equals(t1.getDob(), t2.getDob()) &&
+                Objects.equals(t1.getAddress(), t2.getAddress()) &&
+                Objects.equals(t1.getReligion(), t2.getReligion());
+    }
+
+    /**
+     * Check if two Platforms objects are equal
+     */
+    private boolean platformsEquals(Platforms p1, Platforms p2) {
+        if (p1 == null && p2 == null) return true;
+        if (p1 == null || p2 == null) return false;
+
+        return Objects.equals(p1.getOs(), p2.getOs()) &&
+                Objects.equals(p1.getDevice(), p2.getDevice()) &&
+                Objects.equals(p1.getBrowser(), p2.getBrowser()) &&
+                Objects.equals(p1.getAppVersion(), p2.getAppVersion());
+    }
+
+    /**
+     * Check if two Campaign objects are equal
+     */
+    private boolean campaignEquals(Campaign c1, Campaign c2) {
+        if (c1 == null && c2 == null) return true;
+        if (c1 == null || c2 == null) return false;
+
+        return Objects.equals(c1.getUtmSource(), c2.getUtmSource()) &&
+                Objects.equals(c1.getUtmCampaign(), c2.getUtmCampaign()) &&
+                Objects.equals(c1.getUtmMedium(), c2.getUtmMedium()) &&
+                Objects.equals(c1.getUtmContent(), c2.getUtmContent()) &&
+                Objects.equals(c1.getUtmTerm(), c2.getUtmTerm()) &&
+                Objects.equals(c1.getUtmCustom(), c2.getUtmCustom());
     }
 }

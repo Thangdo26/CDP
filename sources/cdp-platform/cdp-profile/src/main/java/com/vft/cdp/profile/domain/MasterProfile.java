@@ -6,13 +6,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+@Slf4j
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * MASTER PROFILE - DOMAIN ENTITY
@@ -230,15 +231,30 @@ public class MasterProfile implements MasterProfileModel {
     public void updateFromProfile(ProfileModel profile) {
         if (profile == null) return;
 
-        // Merge traits
+        // NEW: Check if incoming profile is newer
+        boolean isNewer = true;
+        if (this.lastSeenAt != null && profile.getLastSeenAt() != null) {
+            isNewer = profile.getLastSeenAt().isAfter(this.lastSeenAt) ||
+                    profile.getLastSeenAt().equals(this.lastSeenAt);
+        }
+
+        // Merge traits (only if newer or first time)
         if (this.traits == null) {
             this.traits = new MasterTraits();
         }
-        this.traits = mergeTraits(this.traits, profile.getTraits());
+
+        if (isNewer) {
+            this.traits = mergeTraits(this.traits, profile.getTraits());
+            log.debug("  🔄 Updated traits from newer profile");
+        }
 
         // Update timestamps
         this.updatedAt = Instant.now();
-        this.lastSeenAt = Instant.now();
+
+        // NEW: Update last_seen_at only if profile is newer
+        if (profile.getLastSeenAt() != null && isNewer) {
+            this.lastSeenAt = profile.getLastSeenAt();
+        }
 
         if (this.firstSeenAt == null ||
                 (profile.getFirstSeenAt() != null && profile.getFirstSeenAt().isBefore(this.firstSeenAt))) {

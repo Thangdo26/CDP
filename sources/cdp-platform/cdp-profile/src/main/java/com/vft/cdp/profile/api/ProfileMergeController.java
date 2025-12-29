@@ -223,7 +223,7 @@ public class ProfileMergeController {
      */
     @GetMapping("/master/{masterProfileId}")
     public ResponseEntity<?> getMasterProfile(
-            @PathVariable String masterProfileId,
+            @PathVariable ("masterProfileId") String masterProfileId,
             @AuthenticationPrincipal ApiKeyAuthContext authContext) {
 
         log.info("🔍 GET MASTER PROFILE: id={}", masterProfileId);

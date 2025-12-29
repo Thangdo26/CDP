@@ -33,7 +33,23 @@ public final class MasterProfileMapper {
             throw new IllegalArgumentException("Cannot merge empty profile list");
         }
 
-        Profile firstProfile = profiles.get(0);
+        // ✅ NEW: Sort profiles by last_seen_at DESC (newest first)
+        List<Profile> sortedProfiles = profiles.stream()
+                .sorted((p1, p2) -> {
+                    Instant t1 = p1.getLastSeenAt();
+                    Instant t2 = p2.getLastSeenAt();
+
+                    if (t1 == null && t2 == null) return 0;
+                    if (t1 == null) return 1;  // null last
+                    if (t2 == null) return -1; // null last
+
+                    return t2.compareTo(t1);  // DESC: newest first
+                })
+                .collect(Collectors.toList());
+
+        Profile firstProfile = profiles.get(0);  // For tenant/app
+        Profile newestProfile = sortedProfiles.get(0);
+
         Instant now = Instant.now();
 
         String masterProfileId = "mp_" + UUID.randomUUID().toString();
@@ -47,19 +63,20 @@ public final class MasterProfileMapper {
                 .distinct()
                 .collect(Collectors.toList());
 
-        MasterProfile.MasterTraits masterTraits = mergeTraits(profiles);
+        // ✅ NEW: Merge traits with priority to newest profile
+        MasterProfile.MasterTraits masterTraits = mergeTraitsWithPriority(sortedProfiles);
 
+        // ✅ Calculate timestamps
         Instant firstSeenAt = profiles.stream()
                 .map(Profile::getFirstSeenAt)
                 .filter(Objects::nonNull)
                 .min(Instant::compareTo)
                 .orElse(now);
 
-        Instant lastSeenAt = profiles.stream()
-                .map(Profile::getLastSeenAt)
-                .filter(Objects::nonNull)
-                .max(Instant::compareTo)
-                .orElse(now);
+        // Last seen at in master profile = newest profile's last_seen_at
+        Instant lastSeenAt = newestProfile.getLastSeenAt() != null
+                ? newestProfile.getLastSeenAt()
+                : now;
 
         return MasterProfile.builder()
                 .profileId(masterProfileId)
@@ -76,7 +93,7 @@ public final class MasterProfileMapper {
                 .createdAt(now)
                 .updatedAt(now)
                 .firstSeenAt(firstSeenAt)
-                .lastSeenAt(lastSeenAt)
+                .lastSeenAt(lastSeenAt)  // Get from newest profile
                 .sourceSystems(new ArrayList<>())
                 .version(1)
                 .build();
@@ -86,14 +103,13 @@ public final class MasterProfileMapper {
     // MERGE TRAITS FROM MULTIPLE PROFILES
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    private static MasterProfile.MasterTraits mergeTraits(List<Profile> profiles) {
-        // ✅ FIX: Use lambda instead of method reference
-        // Profile.getTraits() returns TraitsModel interface, not Traits class
+    private static MasterProfile.MasterTraits mergeTraitsWithPriority(List<Profile> profiles) {
+        // Aggregate list fields (collect all unique values)
 
         List<String> emails = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
-                .map(traits -> traits.getEmail())  // ✅ Lambda expression
+                .map(traits -> traits.getEmail())
                 .filter(Objects::nonNull)
                 .map(String::toLowerCase)
                 .distinct()
@@ -102,7 +118,7 @@ public final class MasterProfileMapper {
         List<String> phones = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
-                .map(traits -> traits.getPhone())  // ✅ Lambda expression
+                .map(traits -> traits.getPhone())
                 .filter(Objects::nonNull)
                 .distinct()
                 .collect(Collectors.toList());
@@ -110,15 +126,18 @@ public final class MasterProfileMapper {
         List<String> userIds = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
-                .map(traits -> traits.getIdcard())  // ✅ Lambda expression
+                .map(traits -> traits.getIdcard())
                 .filter(Objects::nonNull)
                 .distinct()
                 .collect(Collectors.toList());
 
+        // NEW: Single value fields - prefer NEWEST profile (first non-null)
+        // Profiles are already sorted by last_seen_at DESC
+
         String firstName = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
-                .map(traits -> traits.getFirstName())  // ✅ Lambda expression
+                .map(traits -> traits.getFirstName())
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
@@ -126,7 +145,7 @@ public final class MasterProfileMapper {
         String lastName = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
-                .map(traits -> traits.getLastName())  // ✅ Lambda expression
+                .map(traits -> traits.getLastName())
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
@@ -134,7 +153,7 @@ public final class MasterProfileMapper {
         String gender = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
-                .map(traits -> traits.getGender())  // ✅ Lambda expression
+                .map(traits -> traits.getGender())
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
@@ -142,7 +161,7 @@ public final class MasterProfileMapper {
         String dob = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
-                .map(traits -> traits.getDob())  // ✅ Lambda expression
+                .map(traits -> traits.getDob())
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
@@ -150,7 +169,7 @@ public final class MasterProfileMapper {
         String address = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
-                .map(traits -> traits.getAddress())  // ✅ Lambda expression
+                .map(traits -> traits.getAddress())
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);

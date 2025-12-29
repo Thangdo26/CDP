@@ -47,4 +47,12 @@ public interface SpringDataMasterProfileRepository
      * Maps to field: tenantId (String)
      */
     List<MasterProfileDocument> findByTenantId(String tenantId);
+
+    /**
+     * Find master profiles by idcard
+     *
+     * ✅ NEW: Used for smart merge
+     * Maps to field: traits.idcard (String)
+     */
+    List<MasterProfileDocument> findByTraitsIdcard(String idcard);
 }

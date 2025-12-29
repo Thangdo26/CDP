@@ -21,6 +21,7 @@ import com.vft.cdp.profile.infra.es.mapper.MasterProfileMapper;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -188,6 +189,10 @@ public class ProfileMergeService {
                 .map(p -> ProfileMapper.buildId(p.getTenantId(), p.getAppId(), p.getUserId()))
                 .collect(Collectors.toList());
 
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // STEP 1: Check by merged profile IDs (existing logic)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
         Set<MasterProfileDocument> existingMasters = new HashSet<>();
 
         for (String profileId : profileIds) {
@@ -195,6 +200,37 @@ public class ProfileMergeService {
                     masterProfileRepo.findByMergedProfileIdsContaining(profileId);
             existingMasters.addAll(masters);
         }
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // STEP 2: Check by IDCARD (NEW - Smart merge)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        if (existingMasters.isEmpty()) {
+            // Extract idcards from profiles
+            Set<String> idcards = profiles.stream()
+                    .map(Profile::getTraits)
+                    .filter(Objects::nonNull)
+                    .map(traits -> traits.getIdcard())
+                    .filter(Objects::nonNull)
+                    .filter(idcard -> !idcard.isBlank())
+                    .collect(Collectors.toSet());
+
+            // Check if any master profile has matching idcard
+            for (String idcard : idcards) {
+                List<MasterProfileDocument> mastersByIdcard =
+                        masterProfileRepo.findByTraitsIdcard(idcard);
+
+                if (!mastersByIdcard.isEmpty()) {
+                    log.info("  🎯 Found {} existing master(s) with same idcard: {}",
+                            mastersByIdcard.size(), idcard);
+                    existingMasters.addAll(mastersByIdcard);
+                }
+            }
+        }
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // STEP 3: Decide action based on findings
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         log.debug("  🔍 Found {} existing masters for {} profiles",
                 existingMasters.size(), profiles.size());
@@ -212,6 +248,7 @@ public class ProfileMergeService {
                     .build();
         }
 
+        // Multiple masters found - need to merge them
         return MergeDecision.builder()
                 .action(MergeAction.MERGE_MASTERS)
                 .existingMasters(new ArrayList<>(existingMasters))
@@ -270,10 +307,26 @@ public class ProfileMergeService {
         existingMaster.setMergedProfileIds(updatedMergedIds);
         existingMaster.setMergeCount(updatedMergedIds.size());
 
-        updateMasterTraits(existingMaster, newProfiles);
+        // ✅ NEW: Update traits with priority to most recent profile
+        updateMasterTraitsWithPriority(existingMaster, newProfiles);
+
+        // ✅ NEW: Update last_seen_at from newest profile
+        Instant newestLastSeenAt = newProfiles.stream()
+                .map(Profile::getLastSeenAt)
+                .filter(Objects::nonNull)
+                .max(Instant::compareTo)
+                .orElse(null);
+
+        if (newestLastSeenAt != null) {
+            // Update if newer than current
+            if (existingMaster.getLastSeenAt() == null ||
+                    newestLastSeenAt.isAfter(existingMaster.getLastSeenAt())) {
+                existingMaster.setLastSeenAt(newestLastSeenAt);
+                log.info("  📅 Updated last_seen_at: {}", newestLastSeenAt);
+            }
+        }
 
         existingMaster.setUpdatedAt(Instant.now());
-        existingMaster.setLastSeenAt(Instant.now());
         existingMaster.setVersion(
                 existingMaster.getVersion() != null ? existingMaster.getVersion() + 1 : 1
         );
@@ -287,7 +340,7 @@ public class ProfileMergeService {
         return saved.getMasterId();
     }
 
-    private void updateMasterTraits(
+    private void updateMasterTraitsWithPriority(
             MasterProfileDocument master,
             List<Profile> newProfiles) {
 
@@ -295,38 +348,67 @@ public class ProfileMergeService {
             master.setTraits(new MasterProfileDocument.Traits());
         }
 
+        // ✅ NEW: Sort profiles by last_seen_at DESC (newest first)
+        List<Profile> sortedProfiles = newProfiles.stream()
+                .sorted((p1, p2) -> {
+                    Instant t1 = p1.getLastSeenAt();
+                    Instant t2 = p2.getLastSeenAt();
+
+                    if (t1 == null && t2 == null) return 0;
+                    if (t1 == null) return 1;  // null last
+                    if (t2 == null) return -1; // null last
+
+                    return t2.compareTo(t1);  // DESC: newest first
+                })
+                .collect(Collectors.toList());
+
         MasterProfileDocument.Traits traits = master.getTraits();
 
-        for (Profile profile : newProfiles) {
+        // ✅ NEW: Iterate sorted profiles (newest first)
+        // First non-null value wins
+        for (Profile profile : sortedProfiles) {
             if (profile.getTraits() == null) continue;
 
-            // Update single value fields
-            if (profile.getTraits().getFullName() != null) {
+            // Update single value fields (only if current is null OR prefer newest)
+            if (profile.getTraits().getFullName() != null && traits.getFullName() == null) {
                 traits.setFullName(profile.getTraits().getFullName());
             }
-            if (profile.getTraits().getFirstName() != null) {
+            if (profile.getTraits().getFirstName() != null && traits.getFirstName() == null) {
                 traits.setFirstName(profile.getTraits().getFirstName());
             }
-            if (profile.getTraits().getLastName() != null) {
+            if (profile.getTraits().getLastName() != null && traits.getLastName() == null) {
                 traits.setLastName(profile.getTraits().getLastName());
             }
-            if (profile.getTraits().getEmail() != null) {
-                traits.setEmail(profile.getTraits().getEmail());
-            }
-            if (profile.getTraits().getPhone() != null) {
-                traits.setPhone(profile.getTraits().getPhone());
-            }
-            if (profile.getTraits().getGender() != null) {
+            if (profile.getTraits().getGender() != null && traits.getGender() == null) {
                 traits.setGender(profile.getTraits().getGender());
             }
-            if (profile.getTraits().getDob() != null) {
+            if (profile.getTraits().getDob() != null && traits.getDob() == null) {
                 traits.setDob(profile.getTraits().getDob());
             }
-            if (profile.getTraits().getAddress() != null) {
+            if (profile.getTraits().getAddress() != null && traits.getAddress() == null) {
                 traits.setAddress(profile.getTraits().getAddress());
             }
-            if (profile.getTraits().getIdcard() != null) {
+            if (profile.getTraits().getIdcard() != null && traits.getIdcard() == null) {
                 traits.setIdcard(profile.getTraits().getIdcard());
+            }
+            if (profile.getTraits().getOldIdcard() != null && traits.getOldIdcard() == null) {
+                traits.setOldIdcard(profile.getTraits().getOldIdcard());
+            }
+            if (profile.getTraits().getReligion() != null && traits.getReligion() == null) {
+                traits.setReligion(profile.getTraits().getReligion());
+            }
+        }
+
+        // ✅ For email and phone: always update to newest (even if not null)
+        Profile newestProfile = sortedProfiles.get(0);
+        if (newestProfile.getTraits() != null) {
+            if (newestProfile.getTraits().getEmail() != null) {
+                traits.setEmail(newestProfile.getTraits().getEmail());
+                log.debug("  📧 Updated email from newest profile: {}", traits.getEmail());
+            }
+            if (newestProfile.getTraits().getPhone() != null) {
+                traits.setPhone(newestProfile.getTraits().getPhone());
+                log.debug("  📱 Updated phone from newest profile: {}", traits.getPhone());
             }
         }
     }
@@ -369,6 +451,16 @@ public class ProfileMergeService {
             mergeTraitsFromMaster(primaryMaster, master);
         }
 
+        // ✅ NEW: Calculate newest last_seen_at from all masters + new profiles
+        Instant newestLastSeenAt = Stream.concat(
+                        existingMasters.stream().map(MasterProfileDocument::getLastSeenAt),
+                        newProfiles.stream().map(Profile::getLastSeenAt)
+                )
+                .filter(Objects::nonNull)
+                .max(Instant::compareTo)
+                .orElse(Instant.now());
+
+        primaryMaster.setLastSeenAt(newestLastSeenAt);  // ✅ Update to newest
         primaryMaster.setUpdatedAt(Instant.now());
         primaryMaster.setVersion(
                 primaryMaster.getVersion() != null ? primaryMaster.getVersion() + 1 : 1
@@ -611,14 +703,13 @@ public class ProfileMergeService {
     }
 
     public MasterProfile getMasterProfile(String masterProfileId) {
-        // Simple scan through all master profiles to find by masterId
-        List<MasterProfileDocument> allMasters = (List<MasterProfileDocument>) masterProfileRepo.findAll();
-
-        MasterProfileDocument doc = allMasters.stream()
-                .filter(m -> masterProfileId.equals(m.getMasterId()))
-                .findFirst()
+        // ✅ FIX: Use findByMasterId instead of findAll + filter
+        MasterProfileDocument doc = masterProfileRepo.findByMasterId(masterProfileId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Master profile not found: " + masterProfileId));
+
+        log.info("✅ Found master profile: masterId={}, mergedCount={}",
+                masterProfileId, doc.getMergeCount());
 
         return MasterProfileMapper.toDomain(doc);
     }

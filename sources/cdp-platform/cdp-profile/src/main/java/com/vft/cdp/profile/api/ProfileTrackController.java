@@ -17,11 +17,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/v1")
 @RequiredArgsConstructor
-public class ProfileIngestionController {
+public class ProfileTrackController {
 
     private final ProfileIngestionService ingestionService;
 
-    @PostMapping("/profiles")
+    @PostMapping("/profiles/track")
     public ResponseEntity<ApiResponse> ingestProfile(
             @Valid @RequestBody ProfileIngestionRequest request,
             @AuthenticationPrincipal ApiKeyAuthContext authContext
