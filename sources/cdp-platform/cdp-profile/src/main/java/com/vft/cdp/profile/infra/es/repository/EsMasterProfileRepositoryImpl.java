@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
  * ELASTICSEARCH MASTER PROFILE REPOSITORY IMPLEMENTATION
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ FIXED: Changed findByMergedIdsContaining → findByMergedProfileIdsContaining
+ *  FIXED: Changed findByMergedIdsContaining → findByMergedProfileIdsContaining
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -48,7 +48,7 @@ public class EsMasterProfileRepositoryImpl implements MasterProfileRepository {
     public Optional<MasterProfile> findByMergedProfileId(String profileId) {
         log.debug("Finding master profile containing merged profile: {}", profileId);
 
-        // ✅ FIXED: findByMergedProfileIdsContaining (matches MasterProfileDocument.mergedProfileIds field)
+        //  FIXED: findByMergedProfileIdsContaining (matches MasterProfileDocument.mergedProfileIds field)
         List<MasterProfileDocument> docs = springDataRepo.findByMergedProfileIdsContaining(profileId);
 
         if (docs.isEmpty()) {

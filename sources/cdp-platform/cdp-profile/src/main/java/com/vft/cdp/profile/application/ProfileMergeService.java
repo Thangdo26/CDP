@@ -204,7 +204,7 @@ public class ProfileMergeService {
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // STEP 2: ALWAYS Check by IDCARD
-        // ✅ REMOVED: if (existingMasters.isEmpty())
+        //  REMOVED: if (existingMasters.isEmpty())
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         Set<String> idcards = profiles.stream()
@@ -306,17 +306,20 @@ public class ProfileMergeService {
         existingMaster.setMergeCount(updatedMergedIds.size());
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        //  Load ALL merged profiles (existing + new)
+        // Load ALL merged profiles (existing + new)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         List<Profile> allMergedProfiles = new ArrayList<>(newProfiles);
 
-        if (currentMergedIds != null && !currentMergedIds.isEmpty()) {
+        if (!currentMergedIds.isEmpty()) {
             List<Profile> existingProfiles = loadProfiles(currentMergedIds);
             allMergedProfiles.addAll(existingProfiles);
         }
 
-        //  Sort by last_seen_at DESC (newest first)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Sort by last_seen_at DESC (newest first)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
         allMergedProfiles.sort((p1, p2) -> {
             Instant t1 = p1.getLastSeenAt();
             Instant t2 = p2.getLastSeenAt();
@@ -325,25 +328,36 @@ public class ProfileMergeService {
             if (t1 == null) return 1;   // null last
             if (t2 == null) return -1;  // null last
 
-            return t2.compareTo(t1);  // DESC
+            return t2.compareTo(t1);  // DESC: newest first
         });
 
-        Profile newestProfile = allMergedProfiles.get(0);
-        Instant newestLastSeenAt = newestProfile.getLastSeenAt();
-
-        log.info("  🔍 Newest profile: userId={}, last_seen_at={}",
-                newestProfile.getUserId(), newestLastSeenAt);
-
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        //  Update master with ALL profiles
+        // ✅ Calculate MAX last_seen_at from ALL profiles
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        updateMasterTraitsFromAllProfiles(existingMaster, allMergedProfiles, newestProfile);
-        updateMasterPlatformsWithPriority(existingMaster, newestProfile);
-        updateMasterCampaignWithPriority(existingMaster, newestProfile);
+        Instant maxLastSeenAt = allMergedProfiles.stream()
+                .map(Profile::getLastSeenAt)
+                .filter(java.util.Objects::nonNull)
+                .max(Instant::compareTo)
+                .orElse(Instant.now());
 
-        // Update last_seen_at
-        existingMaster.setLastSeenAt(newestLastSeenAt);
+        log.info("  📅 Max last_seen_at from {} profiles: {}",
+                allMergedProfiles.size(), maxLastSeenAt);
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Update master with ALL profiles
+        // allProfiles already sorted by last_seen_at DESC
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        updateMasterTraitsFromAllProfiles(existingMaster, allMergedProfiles, allMergedProfiles.get(0));
+        updateMasterPlatformsWithPriority(existingMaster, allMergedProfiles.get(0));
+        updateMasterCampaignWithPriority(existingMaster, allMergedProfiles.get(0));
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // ✅ Set last_seen_at to MAX value
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        existingMaster.setLastSeenAt(maxLastSeenAt);
 
         // Always update metadata
         existingMaster.setUpdatedAt(Instant.now());
@@ -353,8 +367,10 @@ public class ProfileMergeService {
 
         MasterProfileDocument saved = masterProfileRepo.save(existingMaster);
 
-        log.info("   Master updated: {} profiles, version={}",
-                saved.getMergedProfileIds().size(), saved.getVersion());
+        log.info("  ✅ Master updated: {} profiles, version={}, last_seen_at={}",
+                saved.getMergedProfileIds().size(),
+                saved.getVersion(),
+                saved.getLastSeenAt());
 
         markProfilesAsMerged(newProfiles, saved.getMasterId());
 
@@ -378,33 +394,28 @@ public class ProfileMergeService {
         if (traits.getUserId() == null) traits.setUserId(new ArrayList<>());
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        //  COLLECT EMAILS - PRESERVE ORIGINAL CASE
+        // AGGREGATE LIST FIELDS (no timestamp check needed)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+        // Emails
         List<String> allEmails = allProfiles.stream()
                 .map(Profile::getTraits)
                 .filter(java.util.Objects::nonNull)
                 .map(t -> t.getEmail())
                 .filter(java.util.Objects::nonNull)
                 .filter(e -> !e.isBlank())
-                .map(String::trim)  //  ONLY trim, NOT toLowerCase
+                .map(String::trim)
                 .collect(Collectors.toList());
 
-        // Add emails with case-insensitive duplicate check
         for (String email : allEmails) {
             boolean exists = traits.getEmail().stream()
                     .anyMatch(existing -> existing.equalsIgnoreCase(email));
-
             if (!exists) {
-                traits.getEmail().add(email);  //  Keep original case
-                log.debug("  📧 Added email: {}", email);
+                traits.getEmail().add(email);
             }
         }
 
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // COLLECT PHONES
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+        // Phones
         Set<String> allPhones = allProfiles.stream()
                 .map(Profile::getTraits)
                 .filter(java.util.Objects::nonNull)
@@ -417,14 +428,10 @@ public class ProfileMergeService {
         for (String phone : allPhones) {
             if (!traits.getPhone().contains(phone)) {
                 traits.getPhone().add(phone);
-                log.debug("  📱 Added phone: {}", phone);
             }
         }
 
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // COLLECT USER IDs
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+        // User IDs
         Set<String> allUserIds = allProfiles.stream()
                 .map(Profile::getUserId)
                 .filter(java.util.Objects::nonNull)
@@ -434,67 +441,149 @@ public class ProfileMergeService {
         for (String userId : allUserIds) {
             if (!traits.getUserId().contains(userId)) {
                 traits.getUserId().add(userId);
-                log.debug("  👤 Added user_id: {}", userId);
             }
         }
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // SINGLE-VALUE FIELDS from NEWEST profile
+        // ✅ SINGLE-VALUE FIELDS WITH TIMESTAMP CHECK
+        // Only update if profile's last_seen_at >= master's last_seen_at
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        ProfileModel.TraitsModel newestTraits = newestProfile.getTraits();
-        if (newestTraits == null) return;
+        Instant masterLastSeenAt = master.getLastSeenAt();
+        log.debug("  ⏰ Master current last_seen_at: {}", masterLastSeenAt);
 
-        if (newestTraits.getFullName() != null) {
-            traits.setFullName(newestTraits.getFullName());
-            log.debug("   Updated fullName from newest: {}", traits.getFullName());
+        // Full Name
+        String newFullName = getFirstValueFromNewerProfiles(
+                allProfiles, masterLastSeenAt, t -> t.getFullName());
+        updateSingleValueField(traits, "fullName", traits.getFullName(),
+                newFullName, allProfiles, masterLastSeenAt, t -> t.getFullName());
+
+        // First Name
+        String newFirstName = getFirstValueFromNewerProfiles(
+                allProfiles, masterLastSeenAt, t -> t.getFirstName());
+        updateSingleValueField(traits, "firstName", traits.getFirstName(),
+                newFirstName, allProfiles, masterLastSeenAt, t -> t.getFirstName());
+
+        // Last Name
+        String newLastName = getFirstValueFromNewerProfiles(
+                allProfiles, masterLastSeenAt, t -> t.getLastName());
+        updateSingleValueField(traits, "lastName", traits.getLastName(),
+                newLastName, allProfiles, masterLastSeenAt, t -> t.getLastName());
+
+        // Gender
+        String newGender = getFirstValueFromNewerProfiles(
+                allProfiles, masterLastSeenAt, t -> t.getGender());
+        updateSingleValueField(traits, "gender", traits.getGender(),
+                newGender, allProfiles, masterLastSeenAt, t -> t.getGender());
+
+        // DOB
+        String newDob = getFirstValueFromNewerProfiles(
+                allProfiles, masterLastSeenAt, t -> t.getDob());
+        updateSingleValueField(traits, "dob", traits.getDob(),
+                newDob, allProfiles, masterLastSeenAt, t -> t.getDob());
+
+        // Address
+        String newAddress = getFirstValueFromNewerProfiles(
+                allProfiles, masterLastSeenAt, t -> t.getAddress());
+        updateSingleValueField(traits, "address", traits.getAddress(),
+                newAddress, allProfiles, masterLastSeenAt, t -> t.getAddress());
+
+        // Idcard
+        String newIdcard = getFirstValueFromNewerProfiles(
+                allProfiles, masterLastSeenAt, t -> t.getIdcard());
+        updateSingleValueField(traits, "idcard", traits.getIdcard(),
+                newIdcard, allProfiles, masterLastSeenAt, t -> t.getIdcard());
+
+        // Old Idcard
+        String newOldIdcard = getFirstValueFromNewerProfiles(
+                allProfiles, masterLastSeenAt, t -> t.getOldIdcard());
+        updateSingleValueField(traits, "oldIdcard", traits.getOldIdcard(),
+                newOldIdcard, allProfiles, masterLastSeenAt, t -> t.getOldIdcard());
+
+        // Religion
+        String newReligion = getFirstValueFromNewerProfiles(
+                allProfiles, masterLastSeenAt, t -> t.getReligion());
+        updateSingleValueField(traits, "religion", traits.getReligion(),
+                newReligion, allProfiles, masterLastSeenAt, t -> t.getReligion());
+
+    }
+
+    private void updateSingleValueField(
+            MasterProfileDocument.Traits traits,
+            String fieldName,
+            String currentValue,
+            String newValue,
+            List<Profile> allProfiles,
+            Instant masterLastSeenAt,
+            java.util.function.Function<ProfileModel.TraitsModel, String> fieldExtractor) {
+
+        if (newValue == null || newValue.isBlank()) {
+            return; // No new value to set
         }
 
-        if (newestTraits.getFirstName() != null) {
-            traits.setFirstName(newestTraits.getFirstName());
-            log.debug("   Updated firstName from newest: {}", traits.getFirstName());
+        // Case 1: Current value is null/blank → Always update
+        if (currentValue == null || currentValue.isBlank()) {
+            setTraitField(traits, fieldName, newValue);
+            log.debug("  📝 Updated {}: {} (was null)", fieldName, newValue);
+            return;
         }
 
-        if (newestTraits.getLastName() != null) {
-            traits.setLastName(newestTraits.getLastName());
-            log.debug("   Updated lastName from newest: {}", traits.getLastName());
-        }
+        // Case 2: Check if new value comes from a newer profile
+        boolean isFromNewerProfile = allProfiles.stream()
+                .filter(p -> p.getTraits() != null)
+                .filter(p -> newValue.equals(fieldExtractor.apply(p.getTraits())))
+                .anyMatch(p -> {
+                    Instant pLastSeen = p.getLastSeenAt();
+                    return pLastSeen != null &&
+                            (masterLastSeenAt == null || !pLastSeen.isBefore(masterLastSeenAt));
+                });
 
-        if (newestTraits.getGender() != null) {
-            traits.setGender(newestTraits.getGender());
-            log.debug("   Updated gender from newest: {}", traits.getGender());
+        if (isFromNewerProfile) {
+            setTraitField(traits, fieldName, newValue);
+            log.debug("  📝 Updated {}: {} (from newer profile)", fieldName, newValue);
+        } else {
+            log.debug("  ⏭️  Skipped {}: profile too old (last_seen_at < master)", fieldName);
         }
+    }
 
-        if (newestTraits.getDob() != null) {
-            traits.setDob(newestTraits.getDob());
-            log.debug("   Updated dob from newest: {}", traits.getDob());
+    /**
+     * Set trait field by name using reflection-like approach
+     */
+    private void setTraitField(MasterProfileDocument.Traits traits, String fieldName, String value) {
+        switch (fieldName) {
+            case "fullName": traits.setFullName(value); break;
+            case "firstName": traits.setFirstName(value); break;
+            case "lastName": traits.setLastName(value); break;
+            case "gender": traits.setGender(value); break;
+            case "dob": traits.setDob(value); break;
+            case "address": traits.setAddress(value); break;
+            case "idcard": traits.setIdcard(value); break;
+            case "oldIdcard": traits.setOldIdcard(value); break;
+            case "religion": traits.setReligion(value); break;
         }
+    }
 
-        if (newestTraits.getAddress() != null) {
-            traits.setAddress(newestTraits.getAddress());
-            log.debug("   Updated address from newest: {}", traits.getAddress());
-        }
+    /**
+     * Get first non-null value from profiles with last_seen_at >= masterLastSeenAt
+     */
+    private String getFirstValueFromNewerProfiles(
+            List<Profile> allProfiles,
+            Instant masterLastSeenAt,
+            java.util.function.Function<ProfileModel.TraitsModel, String> fieldExtractor) {
 
-        //  NEW: Update idcard, oldIdcard, religion
-        if (newestTraits.getIdcard() != null) {
-            traits.setIdcard(newestTraits.getIdcard());
-            log.debug("   Updated idcard from newest: {}", traits.getIdcard());
-        }
-
-        if (newestTraits.getOldIdcard() != null) {
-            traits.setOldIdcard(newestTraits.getOldIdcard());
-            log.debug("   Updated oldIdcard from newest: {}", traits.getOldIdcard());
-        }
-
-        if (newestTraits.getReligion() != null) {
-            traits.setReligion(newestTraits.getReligion());
-            log.debug("   Updated religion from newest: {}", traits.getReligion());
-        }
-
-        log.info("   Master traits updated: {} emails, {} phones, {} user_ids",
-                traits.getEmail().size(),
-                traits.getPhone().size(),
-                traits.getUserId().size());
+        return allProfiles.stream()
+                .filter(p -> {
+                    Instant pLastSeen = p.getLastSeenAt();
+                    return pLastSeen != null &&
+                            (masterLastSeenAt == null || !pLastSeen.isBefore(masterLastSeenAt));
+                })
+                .map(Profile::getTraits)
+                .filter(java.util.Objects::nonNull)
+                .map(fieldExtractor)
+                .filter(java.util.Objects::nonNull)
+                .filter(s -> !s.isBlank())
+                .findFirst()
+                .orElse(null);
     }
 
 
@@ -589,12 +678,14 @@ public class ProfileMergeService {
 
         log.info("  🔀 Merging {} existing masters", existingMasters.size());
 
+        // Select primary master (oldest one)
         MasterProfileDocument primaryMaster = existingMasters.stream()
                 .min(Comparator.comparing(m -> m.getCreatedAt() != null ? m.getCreatedAt() : Instant.now()))
                 .orElse(existingMasters.get(0));
 
         log.info("  👑 Primary master: {}", primaryMaster.getMasterId());
 
+        // Collect all profile IDs
         Set<String> allProfileIds = new HashSet<>();
 
         for (MasterProfileDocument master : existingMasters) {
@@ -610,6 +701,7 @@ public class ProfileMergeService {
         primaryMaster.setMergedProfileIds(new ArrayList<>(allProfileIds));
         primaryMaster.setMergeCount(allProfileIds.size());
 
+        // Merge traits from other masters
         for (MasterProfileDocument master : existingMasters) {
             if (master.getMasterId().equals(primaryMaster.getMasterId())) {
                 continue;
@@ -617,8 +709,11 @@ public class ProfileMergeService {
             mergeTraitsFromMaster(primaryMaster, master);
         }
 
-        //  NEW: Calculate newest last_seen_at from all masters + new profiles
-        Instant newestLastSeenAt = Stream.concat(
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // ✅ Calculate MAX last_seen_at from masters + profiles
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        Instant maxLastSeenAt = Stream.concat(
                         existingMasters.stream().map(MasterProfileDocument::getLastSeenAt),
                         newProfiles.stream().map(Profile::getLastSeenAt)
                 )
@@ -626,7 +721,10 @@ public class ProfileMergeService {
                 .max(Instant::compareTo)
                 .orElse(Instant.now());
 
-        primaryMaster.setLastSeenAt(newestLastSeenAt);  //  Update to newest
+        log.info("  📅 Max last_seen_at from {} masters + {} profiles: {}",
+                existingMasters.size(), newProfiles.size(), maxLastSeenAt);
+
+        primaryMaster.setLastSeenAt(maxLastSeenAt);
         primaryMaster.setUpdatedAt(Instant.now());
         primaryMaster.setVersion(
                 primaryMaster.getVersion() != null ? primaryMaster.getVersion() + 1 : 1
@@ -634,8 +732,11 @@ public class ProfileMergeService {
 
         MasterProfileDocument saved = masterProfileRepo.save(primaryMaster);
 
-        log.info("   Primary master saved with {} profiles", saved.getMergedProfileIds().size());
+        log.info("  ✅ Primary master saved with {} profiles, last_seen_at={}",
+                saved.getMergedProfileIds().size(),
+                saved.getLastSeenAt());
 
+        // Delete other masters
         for (MasterProfileDocument master : existingMasters) {
             if (!master.getMasterId().equals(primaryMaster.getMasterId())) {
                 masterProfileRepo.deleteById(master.getId());

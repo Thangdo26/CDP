@@ -15,8 +15,8 @@ import java.util.Map;
  * PROFILE RESPONSE DTO - USING PROFILE DTO
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ Maps from ProfileDTO (not EnrichedProfile)
- * ✅ Clean separation of concerns
+ *  Maps from ProfileDTO (not EnrichedProfile)
+ *  Clean separation of concerns
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Data

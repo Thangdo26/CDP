@@ -17,10 +17,10 @@ import java.util.Objects;
  * PROFILE DOMAIN ENTITY - PURE DDD
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ Self-contained domain entity
- * ✅ No dependency on cdp-common
- * ✅ Implements ProfileModel interface
- * ✅ Contains business logic
+ *  Self-contained domain entity
+ *  No dependency on cdp-common
+ *  Implements ProfileModel interface
+ *  Contains business logic
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -175,8 +175,8 @@ public class Profile implements ProfileModel {
     /**
      * Update profile data
      *
-     * ✅ NEW: Auto-reactivate if data changed
-     * ✅ NEW: Returns masterId if profile was reactivated from MERGED status
+     *  NEW: Auto-reactivate if data changed
+     *  NEW: Returns masterId if profile was reactivated from MERGED status
      *
      * @return masterId if profile was reactivated, null otherwise
      */
@@ -250,7 +250,7 @@ public class Profile implements ProfileModel {
     }
 
     /**
-     * ✅ NEW: Update metadata and extract timestamps
+     *  NEW: Update metadata and extract timestamps
      *
      * Call this AFTER update() to handle metadata changes
      */
@@ -266,7 +266,7 @@ public class Profile implements ProfileModel {
 
         this.metadata.putAll(newMetadata);
 
-        // ✅ Extract last_seen_at from metadata
+        //  Extract last_seen_at from metadata
         if (newMetadata.containsKey("last_seen_at")) {
             Object lastSeenObj = newMetadata.get("last_seen_at");
             if (lastSeenObj != null) {
@@ -274,7 +274,7 @@ public class Profile implements ProfileModel {
             }
         }
 
-        // ✅ Extract first_seen_at from metadata
+        //  Extract first_seen_at from metadata
         if (newMetadata.containsKey("first_seen_at")) {
             Object firstSeenObj = newMetadata.get("first_seen_at");
             if (firstSeenObj != null) {

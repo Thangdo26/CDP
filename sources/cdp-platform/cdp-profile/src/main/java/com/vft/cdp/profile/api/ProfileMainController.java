@@ -26,8 +26,8 @@ import java.util.Optional;
  * PROFILE REST API CONTROLLER - NO ENRICHED PROFILE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ Uses ProfileDTO instead of EnrichedProfile
- * ✅ Pure domain-driven design
+ *  Uses ProfileDTO instead of EnrichedProfile
+ *  Pure domain-driven design
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -126,7 +126,7 @@ public class ProfileMainController {
 
             ProfileResponse response = ProfileResponse.fromProfileDTO(updated);
 
-            log.info("✅ Profile updated successfully");
+            log.info(" Profile updated successfully");
 
             return ResponseEntity.ok(response);
 

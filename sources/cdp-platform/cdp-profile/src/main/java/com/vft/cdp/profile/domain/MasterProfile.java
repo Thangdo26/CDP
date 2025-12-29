@@ -151,7 +151,7 @@ public class MasterProfile implements MasterProfileModel {
         return this.platforms;
     }
 
-    // ✅ ADD: Implement getCampaigns()
+    //  ADD: Implement getCampaigns()
     @Override
     public MasterProfileModel.CampaignModel getCampaigns() {
         return this.campaign;
@@ -341,7 +341,7 @@ public class MasterProfile implements MasterProfileModel {
     }
 
     /**
-     * ✅ NEW: Merge platforms - prefer incoming if not null
+     *  NEW: Merge platforms - prefer incoming if not null
      */
     private MasterPlatforms mergePlatforms(MasterPlatforms existing, ProfileModel.PlatformsModel incoming) {
         if (incoming == null) return existing;
@@ -358,7 +358,7 @@ public class MasterProfile implements MasterProfileModel {
     }
 
     /**
-     * ✅ NEW: Convert ProfileModel.PlatformsModel to MasterPlatforms
+     *  NEW: Convert ProfileModel.PlatformsModel to MasterPlatforms
      */
     private static MasterPlatforms convertPlatforms(ProfileModel.PlatformsModel source) {
         if (source == null) return null;
@@ -372,7 +372,7 @@ public class MasterProfile implements MasterProfileModel {
     }
 
     /**
-     * ✅ NEW: Merge campaign - prefer incoming if not null
+     *  NEW: Merge campaign - prefer incoming if not null
      */
     private MasterCampaign mergeCampaign(MasterCampaign existing, ProfileModel.CampaignModel incoming) {
         if (incoming == null) return existing;
@@ -391,7 +391,7 @@ public class MasterProfile implements MasterProfileModel {
     }
 
     /**
-     * ✅ NEW: Convert ProfileModel.CampaignModel to MasterCampaign
+     *  NEW: Convert ProfileModel.CampaignModel to MasterCampaign
      */
     private static MasterCampaign convertCampaign(ProfileModel.CampaignModel source) {
         if (source == null) return null;
@@ -420,8 +420,8 @@ public class MasterProfile implements MasterProfileModel {
                 .mergedIds(new ArrayList<>(List.of(buildProfileId(profile))))
                 .deviceId(new ArrayList<>())
                 .traits(convertTraits(profile.getTraits()))
-                .platforms(convertPlatforms(profile.getPlatforms()))  // ✅ ADD
-                .campaign(convertCampaign(profile.getCampaign()))      // ✅ ADD
+                .platforms(convertPlatforms(profile.getPlatforms()))  //  ADD
+                .campaign(convertCampaign(profile.getCampaign()))      //  ADD
                 .segments(new ArrayList<>())
                 .scores(new HashMap<>())
                 .consents(new HashMap<>())
@@ -496,7 +496,7 @@ public class MasterProfile implements MasterProfileModel {
         private Instant lastPurchaseAt;
     }
 
-    // ✅ NEW: Add Platforms
+    //  NEW: Add Platforms
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -508,7 +508,7 @@ public class MasterProfile implements MasterProfileModel {
         private String appVersion;
     }
 
-    // ✅ NEW: Add Campaign
+    //  NEW: Add Campaign
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

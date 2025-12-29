@@ -21,8 +21,8 @@ import java.time.Instant;
  * PROFILE MERGE API CONTROLLER - DOMAIN MASTER PROFILE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ Uses Domain MasterProfile (not cdp-common)
- * ✅ Pure domain-driven design
+ *  Uses Domain MasterProfile (not cdp-common)
+ *  Pure domain-driven design
  *
  * ENDPOINTS:
  * - POST /v1/profiles/merge_auto   - Automatic duplicate detection & merge
@@ -100,7 +100,7 @@ public class ProfileMergeController {
                     .processedAt(Instant.now())
                     .build();
 
-            log.info("✅ AUTO MERGE completed: {} master profiles created in {}ms",
+            log.info(" AUTO MERGE completed: {} master profiles created in {}ms",
                     result.getMasterProfilesCreated(), processingTime);
 
             return ResponseEntity.ok(response);
@@ -186,7 +186,7 @@ public class ProfileMergeController {
                     .mergedAt(Instant.now())
                     .build();
 
-            log.info("✅ MANUAL MERGE completed: master_profile_id={}",
+            log.info(" MANUAL MERGE completed: master_profile_id={}",
                     masterProfile.getProfileId());
 
             return ResponseEntity.ok(response);

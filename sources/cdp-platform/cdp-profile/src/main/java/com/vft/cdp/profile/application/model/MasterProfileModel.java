@@ -24,7 +24,7 @@ public interface MasterProfileModel {
     List<String> getDeviceId();
     List<String> getMergedIds();
     MasterTraitsModel getTraits();
-    PlatformsModel getPlatforms();      // ✅ ADD
+    PlatformsModel getPlatforms();      //  ADD
     CampaignModel getCampaigns();
     List<String> getSegments();
     Map<String, Double> getScores();
@@ -66,7 +66,7 @@ public interface MasterProfileModel {
         String getSource();
     }
 
-    // ✅ NEW: Nested interfaces
+    //  NEW: Nested interfaces
     interface PlatformsModel {
         String getOs();
         String getDevice();

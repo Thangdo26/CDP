@@ -55,7 +55,7 @@ public class KafkaConfig {
         config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
 
-        // ✅ FIX: Thêm cả 2 packages: event và profile
+        //  FIX: Thêm cả 2 packages: event và profile
         config.put(JsonDeserializer.TRUSTED_PACKAGES,
                 "com.vft.cdp.common.event,com.vft.cdp.common.profile");
 

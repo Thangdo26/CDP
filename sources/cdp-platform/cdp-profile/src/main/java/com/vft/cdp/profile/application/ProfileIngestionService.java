@@ -65,7 +65,7 @@ public class ProfileIngestionService {
                         log.error("❌ Failed to send profile to Kafka: topic={}, key={}",
                                 PROFILE_RAW_TOPIC, kafkaKey, ex);
                     } else {
-                        log.info("✅ Sent profile to Kafka: topic={}, partition={}, offset={}",
+                        log.info(" Sent profile to Kafka: topic={}, partition={}, offset={}",
                                 PROFILE_RAW_TOPIC,
                                 result.getRecordMetadata().partition(),
                                 result.getRecordMetadata().offset());

@@ -19,8 +19,8 @@ import org.springframework.stereotype.Service;
  * FLOW:
  * Kafka (RawProfile) → Convert to Command → ProfileService → ES
  *
- * ✅ No EnrichedProfile - convert directly to domain
- * ✅ Use ProfileService for business logic
+ *  No EnrichedProfile - convert directly to domain
+ *  Use ProfileService for business logic
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j

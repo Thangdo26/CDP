@@ -78,7 +78,7 @@ public class EventStorageConsumer {
             // Save to Elasticsearch
             eventRepo.save(doc);
 
-            log.info("✅ SUCCESS - Event stored: id={}", event.getEnrichedId());
+            log.info(" SUCCESS - Event stored: id={}", event.getEnrichedId());
 
         } catch (Exception ex) {
             log.error("❌ ERROR - Failed to store event: id={}",

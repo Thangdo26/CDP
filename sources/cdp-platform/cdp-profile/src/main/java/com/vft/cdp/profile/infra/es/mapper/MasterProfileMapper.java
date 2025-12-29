@@ -3,20 +3,21 @@ package com.vft.cdp.profile.infra.es.mapper;
 import com.vft.cdp.profile.domain.MasterProfile;
 import com.vft.cdp.profile.domain.Profile;
 import com.vft.cdp.profile.infra.es.document.MasterProfileDocument;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
-
+@Slf4j
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * MASTER PROFILE MAPPER - CORRECTED
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ FIX: Changed method references to lambda expressions
- * ✅ Profile.getTraits() returns ProfileModel.TraitsModel (interface)
- * ✅ Must call methods on interface, not concrete class
+ *  FIX: Changed method references to lambda expressions
+ *  Profile.getTraits() returns ProfileModel.TraitsModel (interface)
+ *  Must call methods on interface, not concrete class
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 public final class MasterProfileMapper {
@@ -34,7 +35,10 @@ public final class MasterProfileMapper {
             throw new IllegalArgumentException("Cannot merge empty profile list");
         }
 
-        // ✅ NEW: Sort profiles by last_seen_at DESC (newest first)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Sort profiles by last_seen_at DESC (newest first)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
         List<Profile> sortedProfiles = profiles.stream()
                 .sorted((p1, p2) -> {
                     Instant t1 = p1.getLastSeenAt();
@@ -44,12 +48,11 @@ public final class MasterProfileMapper {
                     if (t1 == null) return 1;  // null last
                     if (t2 == null) return -1; // null last
 
-                    return t2.compareTo(t1);  // DESC: newest first
+                    return t2.compareTo(t1);
                 })
                 .collect(Collectors.toList());
 
-        Profile firstProfile = profiles.get(0);  // For tenant/app
-        Profile newestProfile = sortedProfiles.get(0);
+        Profile firstProfile = profiles.get(0);
 
         Instant now = Instant.now();
 
@@ -64,20 +67,29 @@ public final class MasterProfileMapper {
                 .distinct()
                 .collect(Collectors.toList());
 
-        // ✅ NEW: Merge traits with priority to newest profile
+        // Merge traits with priority to newest profile
         MasterProfile.MasterTraits masterTraits = mergeTraitsWithPriority(sortedProfiles);
 
-        // ✅ Calculate timestamps
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // ✅ Calculate timestamps correctly
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        // First seen at = MIN from all profiles
         Instant firstSeenAt = profiles.stream()
                 .map(Profile::getFirstSeenAt)
                 .filter(Objects::nonNull)
                 .min(Instant::compareTo)
                 .orElse(now);
 
-        // Last seen at in master profile = newest profile's last_seen_at
-        Instant lastSeenAt = newestProfile.getLastSeenAt() != null
-                ? newestProfile.getLastSeenAt()
-                : now;
+        // ✅ Last seen at = MAX from all profiles
+        Instant lastSeenAt = profiles.stream()
+                .map(Profile::getLastSeenAt)
+                .filter(Objects::nonNull)
+                .max(Instant::compareTo)
+                .orElse(now);
+
+        log.info("  📅 Calculated timestamps: first_seen={}, last_seen={}",
+                firstSeenAt, lastSeenAt);
 
         return MasterProfile.builder()
                 .profileId(masterProfileId)
@@ -94,7 +106,7 @@ public final class MasterProfileMapper {
                 .createdAt(now)
                 .updatedAt(now)
                 .firstSeenAt(firstSeenAt)
-                .lastSeenAt(lastSeenAt)  // Get from newest profile
+                .lastSeenAt(lastSeenAt)
                 .sourceSystems(new ArrayList<>())
                 .version(1)
                 .build();
@@ -115,7 +127,7 @@ public final class MasterProfileMapper {
                 .map(traits -> traits.getEmail())
                 .filter(Objects::nonNull)
                 .filter(e -> !e.isBlank())
-                .distinct()  // ✅ KHÔNG toLowerCase
+                .distinct()
                 .collect(Collectors.toList());
 
         List<String> phones = profiles.stream()
@@ -127,7 +139,6 @@ public final class MasterProfileMapper {
                 .distinct()
                 .collect(Collectors.toList());
 
-        // ✅ FIXED: Get from profile.getUserId(), NOT idcard
         List<String> userIds = profiles.stream()
                 .map(Profile::getUserId)
                 .filter(Objects::nonNull)
@@ -136,8 +147,9 @@ public final class MasterProfileMapper {
                 .collect(Collectors.toList());
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // SINGLE VALUE FIELDS (from NEWEST profile)
-        // Profiles are already sorted by last_seen_at DESC
+        // ✅ SINGLE VALUE FIELDS - WITH NULL FALLBACK
+        // Profiles already sorted by last_seen_at DESC
+        // Get first NON-NULL value
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         String firstName = profiles.stream()
@@ -145,6 +157,7 @@ public final class MasterProfileMapper {
                 .filter(Objects::nonNull)
                 .map(traits -> traits.getFirstName())
                 .filter(Objects::nonNull)
+                .filter(s -> !s.isBlank())  // ✅ Also filter blank
                 .findFirst()
                 .orElse(null);
 
@@ -153,6 +166,7 @@ public final class MasterProfileMapper {
                 .filter(Objects::nonNull)
                 .map(traits -> traits.getLastName())
                 .filter(Objects::nonNull)
+                .filter(s -> !s.isBlank())
                 .findFirst()
                 .orElse(null);
 
@@ -161,6 +175,7 @@ public final class MasterProfileMapper {
                 .filter(Objects::nonNull)
                 .map(traits -> traits.getGender())
                 .filter(Objects::nonNull)
+                .filter(s -> !s.isBlank())
                 .findFirst()
                 .orElse(null);
 
@@ -169,6 +184,7 @@ public final class MasterProfileMapper {
                 .filter(Objects::nonNull)
                 .map(traits -> traits.getDob())
                 .filter(Objects::nonNull)
+                .filter(s -> !s.isBlank())
                 .findFirst()
                 .orElse(null);
 
@@ -177,10 +193,10 @@ public final class MasterProfileMapper {
                 .filter(Objects::nonNull)
                 .map(traits -> traits.getAddress())
                 .filter(Objects::nonNull)
+                .filter(s -> !s.isBlank())
                 .findFirst()
                 .orElse(null);
 
-        // ✅ NEW: Get idcard, oldIdcard, religion from NEWEST profile
         String idcard = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
@@ -204,6 +220,7 @@ public final class MasterProfileMapper {
                 .filter(Objects::nonNull)
                 .map(traits -> traits.getReligion())
                 .filter(Objects::nonNull)
+                .filter(s -> !s.isBlank())
                 .findFirst()
                 .orElse(null);
 
@@ -243,10 +260,10 @@ public final class MasterProfileMapper {
                 .mergedProfileIds(master.getMergedIds())
                 .mergeCount(master.getMergedIds() != null ? master.getMergedIds().size() : 0)
 
-                // ✅ FIXED: Map platforms and campaign (not null!)
+                //  FIXED: Map platforms and campaign (not null!)
                 .traits(mapTraitsToDoc(master.getTraits()))
-                .platforms(mapPlatformsToDoc(master.getPlatforms()))  // ✅ NEW
-                .campaign(mapCampaignToDoc(master.getCampaign()))      // ✅ NEW
+                .platforms(mapPlatformsToDoc(master.getPlatforms()))  //  NEW
+                .campaign(mapCampaignToDoc(master.getCampaign()))      //  NEW
 
                 .metadata(new HashMap<>())
                 .createdAt(master.getCreatedAt())
@@ -303,7 +320,7 @@ public final class MasterProfileMapper {
     }
 
     /**
-     * ✅ NEW: Map campaign to document
+     *  NEW: Map campaign to document
      */
     private static MasterProfileDocument.Campaign mapCampaignToDoc(
             com.vft.cdp.profile.application.model.MasterProfileModel.CampaignModel campaign) {
@@ -325,7 +342,7 @@ public final class MasterProfileMapper {
         if (traits == null) return null;
 
         return MasterProfileDocument.Traits.builder()
-                // ✅ Keep as list
+                //  Keep as list
                 .email(traits.getEmail() != null ? new ArrayList<>(traits.getEmail()) : new ArrayList<>())
                 .phone(traits.getPhone() != null ? new ArrayList<>(traits.getPhone()) : new ArrayList<>())
                 .userId(traits.getUserId() != null ? new ArrayList<>(traits.getUserId()) : new ArrayList<>())
@@ -340,7 +357,7 @@ public final class MasterProfileMapper {
                 .dob(traits.getDob())
                 .address(traits.getAddress())
 
-                // ✅ NEW: Map idcard, oldIdcard, religion
+                //  NEW: Map idcard, oldIdcard, religion
                 .idcard(traits.getIdcard())
                 .oldIdcard(traits.getOldIdcard())
                 .religion(traits.getReligion())
@@ -380,7 +397,7 @@ public final class MasterProfileMapper {
         if (traits == null) return null;
 
         return MasterProfile.MasterTraits.builder()
-                // ✅ FIXED: Already List<String>
+                //  FIXED: Already List<String>
                 .email(traits.getEmail() != null ? new ArrayList<>(traits.getEmail()) : new ArrayList<>())
                 .phone(traits.getPhone() != null ? new ArrayList<>(traits.getPhone()) : new ArrayList<>())
                 .userId(traits.getUserId() != null ? new ArrayList<>(traits.getUserId()) : new ArrayList<>())
@@ -391,7 +408,7 @@ public final class MasterProfileMapper {
                 .dob(traits.getDob())
                 .address(traits.getAddress())
 
-                // ✅ NEW: Map idcard, oldIdcard, religion
+                //  NEW: Map idcard, oldIdcard, religion
                 .idcard(traits.getIdcard())
                 .oldIdcard(traits.getOldIdcard())
                 .religion(traits.getReligion())

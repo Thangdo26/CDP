@@ -16,7 +16,7 @@ import java.util.Map;
  * MASTER PROFILE ELASTICSEARCH DOCUMENT - FIXED
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ Added missing 'status' field
+ *  Added missing 'status' field
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Data
@@ -43,7 +43,7 @@ public class MasterProfileDocument {
     private String masterId;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // STATUS - ✅ ADDED
+    // STATUS -  ADDED
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     @Field(type = FieldType.Keyword, name = "status")
@@ -118,15 +118,15 @@ public class MasterProfileDocument {
         @Field(type = FieldType.Keyword, name = "old_idcard")
         private String oldIdcard;  // 
 
-        // ✅ CHANGED: Email is now a LIST
+        //  CHANGED: Email is now a LIST
         @Field(type = FieldType.Keyword, name = "email")
-        private List<String> email;  // ✅ Aggregate all unique emails
+        private List<String> email;  //  Aggregate all unique emails
 
-        // ✅ CHANGED: Phone is now a LIST
+        //  CHANGED: Phone is now a LIST
         @Field(type = FieldType.Keyword, name = "phone")
-        private List<String> phone;  // ✅ Aggregate all unique phones
+        private List<String> phone;  //  Aggregate all unique phones
 
-        // ✅ NEW: User ID list
+        //  NEW: User ID list
         @Field(type = FieldType.Keyword, name = "user_id")
         private List<String> userId;  //
 

@@ -12,7 +12,7 @@ import java.util.Optional;
  * SPRING DATA ELASTICSEARCH REPOSITORY - MASTER PROFILE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ FIXED: Changed findByMergedIdsContaining to findByMergedProfileIdsContaining
+ *  FIXED: Changed findByMergedIdsContaining to findByMergedProfileIdsContaining
  *
  * Reason: MasterProfileDocument has field 'mergedProfileIds', NOT 'mergedIds'
  * Spring Data derives query from method name, so must match exact field name
@@ -31,7 +31,7 @@ public interface SpringDataMasterProfileRepository
     /**
      * Find master profiles that contain a specific merged profile ID
      *
-     * ✅ FIXED: Changed from findByMergedIdsContaining
+     *  FIXED: Changed from findByMergedIdsContaining
      * Maps to field: mergedProfileIds (List<String>)
      */
     List<MasterProfileDocument> findByMergedProfileIdsContaining(String profileId);
@@ -51,7 +51,7 @@ public interface SpringDataMasterProfileRepository
     /**
      * Find master profiles by idcard
      *
-     * ✅ NEW: Used for smart merge
+     *  NEW: Used for smart merge
      * Maps to field: traits.idcard (String)
      */
     List<MasterProfileDocument> findByTraitsIdcard(String idcard);

@@ -26,8 +26,8 @@ import java.util.stream.Collectors;
  * ES PROFILE REPOSITORY IMPLEMENTATION - FIXED
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ Uses STATIC ProfileMapper methods (no DI needed)
- * ✅ Converts between ProfileModel ↔ ProfileDocument
+ *  Uses STATIC ProfileMapper methods (no DI needed)
+ *  Converts between ProfileModel ↔ ProfileDocument
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -56,7 +56,7 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
         // Save to ES
         ProfileDocument saved = esOps.save(document);
 
-        log.info("✅ Profile saved to ES: id={}", saved.getId());
+        log.info(" Profile saved to ES: id={}", saved.getId());
 
         // Convert back to Domain
         return ProfileMapper.toDomain(saved);
@@ -83,7 +83,7 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
 
         esOps.delete(id, ProfileDocument.class);
 
-        log.info("✅ Profile deleted from ES: {}", id);
+        log.info(" Profile deleted from ES: {}", id);
     }
 
     @Override
@@ -112,7 +112,7 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
                 .map(ProfileMapper::toDomain)
                 .collect(Collectors.toList());
 
-        log.debug("✅ Found {} profiles with status={}", models.size(), status);
+        log.debug(" Found {} profiles with status={}", models.size(), status);
 
         return new PageImpl<>(models, pageable, searchHits.getTotalHits());
     }
@@ -150,7 +150,7 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
         List<ProfileModel> result = new ArrayList<>();
         saved.forEach(doc -> result.add(ProfileMapper.toDomain(doc)));
 
-        log.info("✅ Batch saved {} profiles", result.size());
+        log.info(" Batch saved {} profiles", result.size());
 
         return result;
     }
@@ -168,7 +168,7 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
             }
         }
 
-        log.debug("✅ Found {} profiles", models.size());
+        log.debug(" Found {} profiles", models.size());
 
         return models;
     }
@@ -192,7 +192,7 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
                 .map(ProfileMapper::toDomain)
                 .collect(Collectors.toList());
 
-        log.debug("✅ Found {} profiles with email={}", models.size(), email);
+        log.debug(" Found {} profiles with email={}", models.size(), email);
 
         return models;
     }
@@ -212,7 +212,7 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
                 .map(ProfileMapper::toDomain)
                 .collect(Collectors.toList());
 
-        log.debug("✅ Found {} profiles with phone={}", models.size(), phone);
+        log.debug(" Found {} profiles with phone={}", models.size(), phone);
 
         return models;
     }
@@ -232,7 +232,7 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
                 .map(ProfileMapper::toDomain)
                 .collect(Collectors.toList());
 
-        log.debug("✅ Found {} profiles with idcard={}", models.size(), idcard);
+        log.debug(" Found {} profiles with idcard={}", models.size(), idcard);
 
         return models;
     }

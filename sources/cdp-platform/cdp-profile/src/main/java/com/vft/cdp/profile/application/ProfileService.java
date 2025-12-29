@@ -27,10 +27,10 @@ import java.time.Instant;
  * PROFILE SERVICE - PURE DDD
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ No dependency on cdp-common
- * ✅ Works with ProfileModel interface
- * ✅ Uses Domain Profile for business logic
- * ✅ Returns ProfileDTO for API
+ *  No dependency on cdp-common
+ *  Works with ProfileModel interface
+ *  Uses Domain Profile for business logic
+ *  Returns ProfileDTO for API
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -62,7 +62,7 @@ public class ProfileService {
 
             Profile existing = convertToDomain(existingOpt.get());
 
-            // ✅ Call update and capture masterId if profile was reactivated
+            //  Call update and capture masterId if profile was reactivated
             reactivatedFromMasterId = existing.update(
                     mapCommandTraitsToDomain(command.getTraits()),
                     mapCommandPlatformsToDomain(command.getPlatforms()),
@@ -91,7 +91,7 @@ public class ProfileService {
             savedModel = profileRepository.save(newProfile);
         }
 
-        // ✅ Cleanup master if reactivated
+        //  Cleanup master if reactivated
         if (reactivatedFromMasterId != null) {
             cleanupMasterProfileReference(
                     command.getTenantId(),
@@ -143,7 +143,7 @@ public class ProfileService {
 
                     masterProfileRepository.save(master);
 
-                    log.info("✅ Removed profile from master: masterId={}, remaining={} profiles",
+                    log.info(" Removed profile from master: masterId={}, remaining={} profiles",
                             masterId, updatedMergedIds.size());
 
                     // Note: We don't delete master even if mergedIds becomes empty
@@ -169,7 +169,7 @@ public class ProfileService {
 
         Optional<ProfileModel> cached = cacheService.get(tenantId, appId, userId);
         if (cached.isPresent()) {
-            log.debug("✅ Cache HIT: {}|{}|{}", tenantId, appId, userId);
+            log.debug(" Cache HIT: {}|{}|{}", tenantId, appId, userId);
             return Optional.of(ProfileDTOMapper.toDTO(cached.get()));
         }
 
@@ -199,21 +199,21 @@ public class ProfileService {
 
         Profile profile = convertToDomain(existing);
 
-        // ✅ 1. Update traits/platforms/campaign
+        //  1. Update traits/platforms/campaign
         String reactivatedFromMasterId = profile.update(
                 mapCommandTraitsToDomain(command.getTraits()),
                 mapCommandPlatformsToDomain(command.getPlatforms()),
                 mapCommandCampaignToDomain(command.getCampaign())
         );
 
-        // ✅ 2. Update metadata (including timestamps)
+        //  2. Update metadata (including timestamps)
         if (command.getMetadata() != null && !command.getMetadata().isEmpty()) {
             profile.updateMetadata(command.getMetadata());
         }
 
         ProfileModel saved = profileRepository.save(profile);
 
-        // ✅ Cleanup master if reactivated
+        //  Cleanup master if reactivated
         if (reactivatedFromMasterId != null) {
             cleanupMasterProfileReference(
                     command.getTenantId(),
@@ -229,7 +229,7 @@ public class ProfileService {
                 command.getUserId()
         );
 
-        log.info("✅ Profile updated successfully");
+        log.info(" Profile updated successfully");
 
         return ProfileDTOMapper.toDTO(saved);
     }
@@ -253,7 +253,7 @@ public class ProfileService {
 
         cacheService.evict(tenantId, appId, userId);
 
-        log.info("✅ Profile deleted successfully");
+        log.info(" Profile deleted successfully");
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

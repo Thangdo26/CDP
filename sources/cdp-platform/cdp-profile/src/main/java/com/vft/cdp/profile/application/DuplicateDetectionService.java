@@ -15,8 +15,8 @@ import java.util.stream.Collectors;
  * DUPLICATE DETECTION SERVICE - FIXED
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * ✅ FIX: Changed from EnrichedProfile to Domain Profile
- * ✅ FIX: Only loads ACTIVE profiles
+ *  FIX: Changed from EnrichedProfile to Domain Profile
+ *  FIX: Only loads ACTIVE profiles
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -25,13 +25,15 @@ import java.util.stream.Collectors;
 public class DuplicateDetectionService {
 
     private final com.vft.cdp.profile.application.repository.ProfileRepository profileRepository;
+    private final com.vft.cdp.profile.infra.es.SpringDataMasterProfileRepository masterProfileRepo;
+
 
     private static final int PAGE_SIZE = 100;
     private static final int MAX_PAGES = 10;
 
     /**
      * Find duplicate profiles by strategy
-     * ✅ Returns Domain Profile (not EnrichedProfile)
+     *  Returns Domain Profile (not EnrichedProfile)
      */
     public Map<String, List<Profile>> findDuplicatesByStrategy(
             String tenantId,
@@ -47,11 +49,6 @@ public class DuplicateDetectionService {
         List<Profile> allProfiles = loadActiveProfiles(tenantId);
 
         log.info("📊 Loaded {} ACTIVE profiles", allProfiles.size());
-
-        if (allProfiles.size() < 2) {
-            log.warn("⚠️  Not enough profiles to detect duplicates (minimum: 2)");
-            return Collections.emptyMap();
-        }
 
         // Apply strategy
         Map<String, List<Profile>> duplicateGroups;
@@ -80,7 +77,7 @@ public class DuplicateDetectionService {
             };
         }
 
-        log.info("✅ Found {} duplicate groups", duplicateGroups.size());
+        log.info(" Found {} duplicate groups", duplicateGroups.size());
         duplicateGroups.forEach((key, profiles) ->
                 log.info("  📦 Group {}: {} profiles", key, profiles.size())
         );
@@ -93,7 +90,7 @@ public class DuplicateDetectionService {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     /**
-     * ✅ FIX: Load ACTIVE profiles using Application layer repository
+     *  FIX: Load ACTIVE profiles using Application layer repository
      */
     private List<Profile> loadActiveProfiles(String tenantId) {
         List<Profile> allProfiles = new ArrayList<>();
@@ -117,7 +114,7 @@ public class DuplicateDetectionService {
 
             allProfiles.addAll(activeProfiles);
 
-            log.debug("  ✅ Loaded {} active profiles", activeProfiles.size());
+            log.debug("   Loaded {} active profiles", activeProfiles.size());
 
             hasMore = page.hasNext();
             currentPage++;
@@ -215,20 +212,61 @@ public class DuplicateDetectionService {
     private Map<String, List<Profile>> findByIdCard(List<Profile> profiles) {
         log.debug("🔍 Applying strategy: idcard_only");
 
+        //  Handle empty profile list
+        if (profiles == null || profiles.isEmpty()) {
+            log.debug("  ⚠️  No profiles to process");
+            return Collections.emptyMap();
+        }
+
         Map<String, List<Profile>> groups = profiles.stream()
                 .filter(p -> p.getTraits() != null
                         && p.getTraits().getIdcard() != null
                         && !p.getTraits().getIdcard().isBlank())
                 .collect(Collectors.groupingBy(p -> p.getTraits().getIdcard()));
 
-        Map<String, List<Profile>> duplicates = groups.entrySet().stream()
-                .filter(e -> e.getValue().size() >= 2)
-                .collect(Collectors.toMap(
-                        e -> "idcard:" + e.getKey(),
-                        Map.Entry::getValue
-                ));
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Check both multi-profile groups AND single-profile with master
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        log.debug("  ✅ Found {} duplicate groups by idcard", duplicates.size());
+        Map<String, List<Profile>> duplicates = new HashMap<>();
+
+        for (Map.Entry<String, List<Profile>> entry : groups.entrySet()) {
+            String idcard = entry.getKey();
+            List<Profile> groupProfiles = entry.getValue();
+
+            // Case 1: Group has >= 2 profiles → always duplicate
+            if (groupProfiles.size() >= 2) {
+                duplicates.put("idcard:" + idcard, groupProfiles);
+                log.debug("   Duplicate group (multi-profile): idcard={}, size={}",
+                        idcard, groupProfiles.size());
+                continue;
+            }
+
+            // Case 2: Group has 1 profile → check if master exists
+            if (groupProfiles.size() == 1) {
+                try {
+                    //  Check if master profile exists with this idcard
+                    List<com.vft.cdp.profile.infra.es.document.MasterProfileDocument> existingMasters =
+                            masterProfileRepo.findByTraitsIdcard(idcard);
+
+                    if (!existingMasters.isEmpty()) {
+                        duplicates.put("idcard:" + idcard, groupProfiles);
+                        log.info("   Duplicate group (single profile + existing master): " +
+                                        "idcard={}, profileId={}, masterId={}",
+                                idcard,
+                                groupProfiles.get(0).getUserId(),
+                                existingMasters.get(0).getMasterId());
+                    } else {
+                        log.debug("  ⏭️  Skipping single profile without master: idcard={}, profileId={}",
+                                idcard, groupProfiles.get(0).getUserId());
+                    }
+                } catch (Exception e) {
+                    log.error("  ❌ Error checking master for idcard: {}", idcard, e);
+                }
+            }
+        }
+
+        log.debug("   Found {} duplicate groups by idcard", duplicates.size());
         return duplicates;
     }
 
@@ -245,15 +283,33 @@ public class DuplicateDetectionService {
                     return phone + "|" + dob;
                 }));
 
-        Map<String, List<Profile>> duplicates = groups.entrySet().stream()
-                .filter(e -> e.getValue().size() >= 2)
-                .filter(e -> !e.getKey().contains("null"))
-                .collect(Collectors.toMap(
-                        e -> "phone_dob:" + e.getKey(),
-                        Map.Entry::getValue
-                ));
+        //  NEW: Check master for single-profile groups
+        Map<String, List<Profile>> duplicates = new HashMap<>();
 
-        log.debug("  ✅ Found {} duplicate groups by phone_dob", duplicates.size());
+        for (Map.Entry<String, List<Profile>> entry : groups.entrySet()) {
+            String key = entry.getKey();
+            List<Profile> groupProfiles = entry.getValue();
+
+            if (groupProfiles.size() >= 2) {
+                duplicates.put("phone_dob:" + key, groupProfiles);
+                continue;
+            }
+
+            // For single profile, check if matching master exists
+            // Extract phone and dob
+            String[] parts = key.split("\\|");
+            if (parts.length == 2) {
+                String phone = parts[0];
+                String dob = parts[1];
+
+                // Check masters - implementation depends on your query capability
+                // For now, just skip single profiles for phone_dob strategy
+                // You can add master checking if needed
+                log.debug("  ⏭️  Skipping single profile for phone_dob: {}", key);
+            }
+        }
+
+        log.debug("   Found {} duplicate groups by phone_dob", duplicates.size());
         return duplicates;
     }
 
@@ -278,7 +334,7 @@ public class DuplicateDetectionService {
                         Map.Entry::getValue
                 ));
 
-        log.debug("  ✅ Found {} duplicate groups by email_name", duplicates.size());
+        log.debug("   Found {} duplicate groups by email_name", duplicates.size());
         return duplicates;
     }
 
@@ -303,7 +359,7 @@ public class DuplicateDetectionService {
                         Map.Entry::getValue
                 ));
 
-        log.debug("  ✅ Found {} duplicate groups by phone_name", duplicates.size());
+        log.debug("   Found {} duplicate groups by phone_name", duplicates.size());
         return duplicates;
     }
 

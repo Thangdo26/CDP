@@ -38,7 +38,7 @@ public class ProfileCacheService {
         if (l1Cache != null) {
             ProfileModel profile = l1Cache.get(key, ProfileModel.class);
             if (profile != null) {
-                log.debug("✅ L1 Cache HIT: {}", key);
+                log.debug(" L1 Cache HIT: {}", key);
                 return Optional.of(profile);
             }
         }
@@ -48,7 +48,7 @@ public class ProfileCacheService {
         if (l2Cache != null) {
             ProfileModel profile = l2Cache.get(key, ProfileModel.class);
             if (profile != null) {
-                log.debug("✅ L2 Cache HIT: {}", key);
+                log.debug(" L2 Cache HIT: {}", key);
 
                 // Populate L1
                 if (l1Cache != null) {

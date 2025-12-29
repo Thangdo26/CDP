@@ -51,7 +51,7 @@ public final class ProfileMapper {
                 .appId(profile.getAppId())
                 .userId(profile.getUserId())
                 .type(profile.getType())
-                .status(profile.getStatus())  // ✅ getStatus() returns String
+                .status(profile.getStatus())  //  getStatus() returns String
                 .mergedToMasterId(profile.getMergedToMasterId())
                 .mergedAt(profile.getMergedAt())
                 .traits(mapTraitsToDoc(profile.getTraits()))
@@ -78,7 +78,7 @@ public final class ProfileMapper {
                 .appId(model.getAppId())
                 .userId(model.getUserId())
                 .type(model.getType())
-                .status(model.getStatus())  // ✅ Also returns String
+                .status(model.getStatus())  //  Also returns String
                 .mergedToMasterId(model.getMergedToMasterId())
                 .mergedAt(model.getMergedAt())
                 .traits(mapTraitsToDoc(model.getTraits()))
@@ -106,7 +106,7 @@ public final class ProfileMapper {
                 .appId(doc.getAppId())
                 .userId(doc.getUserId())
                 .type(doc.getType())
-                .status(ProfileStatus.fromValue(doc.getStatus()))  // ✅ String → Enum
+                .status(ProfileStatus.fromValue(doc.getStatus()))  //  String → Enum
                 .mergedToMasterId(doc.getMergedToMasterId())
                 .mergedAt(doc.getMergedAt())
                 .traits(mapTraitsToDomain(doc.getTraits()))
