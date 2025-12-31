@@ -1,0 +1,87 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.vft.cdp</groupId>
+    <artifactId>cdp-platform</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>cdp-profile</artifactId>
+  <packaging>jar</packaging>
+
+  <dependencies>
+    <!-- REST API -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- Validation (nếu cần validate request) -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Spring Kafka (consumer) -->
+    <dependency>
+      <groupId>org.springframework.kafka</groupId>
+      <artifactId>spring-kafka</artifactId>
+    </dependency>
+
+    <!-- Elasticsearch Spring Data (transitive có thể đã ở cdp-infra, nhưng thêm vào cũng không sao) -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+    </dependency>
+
+    <!-- Module dùng chung -->
+    <dependency>
+      <groupId>com.vft.cdp</groupId>
+      <artifactId>cdp-common</artifactId>
+      <version>1.0.0-SNAPSHOT</version>
+    </dependency>
+
+    <!-- Infra (kafka, es, redis, mysql config) -->
+    <dependency>
+      <groupId>com.vft.cdp</groupId>
+      <artifactId>cdp-infra</artifactId>
+      <version>1.0.0-SNAPSHOT</version>
+    </dependency>
+
+    <!-- Lombok -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+    </dependency>
+      <dependency>
+          <groupId>com.vft.cdp</groupId>
+          <artifactId>cdp-auth</artifactId>
+          <version>1.0.0-SNAPSHOT</version>
+          <scope>compile</scope>
+      </dependency>
+      <dependency>
+          <groupId>com.vft.cdp</groupId>
+          <artifactId>cdp-ingestion</artifactId>
+          <version>1.0.0-SNAPSHOT</version>
+          <scope>compile</scope>
+      </dependency>
+      <!-- Caffeine - Local Cache -->
+      <dependency>
+          <groupId>com.github.ben-manes.caffeine</groupId>
+          <artifactId>caffeine</artifactId>
+          <version>3.1.8</version>
+      </dependency>
+
+      <!-- Spring Cache Abstraction -->
+      <dependency>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-starter-cache</artifactId>
+      </dependency>
+  </dependencies>
+
+</project>
