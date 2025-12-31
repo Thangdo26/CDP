@@ -2,7 +2,7 @@ package com.vft.cdp.profile.application;
 
 import com.vft.cdp.profile.domain.Profile;
 import com.vft.cdp.profile.domain.ProfileStatus;
-import com.vft.cdp.profile.infra.cache.ProfileCacheService;  // ✅ ADD
+import com.vft.cdp.profile.infra.cache.ProfileCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -11,16 +11,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * DUPLICATE DETECTION SERVICE - WITH CACHE OPTIMIZATION
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- *
- *  ✅ FIX: Added ProfileCacheService injection
- *  ✅ FIX: Check cache before loading from ES
- *  ✅ FIX: Populate cache for loaded profiles
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- */
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -28,22 +19,17 @@ public class DuplicateDetectionService {
 
     private final com.vft.cdp.profile.application.repository.ProfileRepository profileRepository;
     private final com.vft.cdp.profile.infra.es.SpringDataMasterProfileRepository masterProfileRepo;
-    private final ProfileCacheService profileCacheService;  // ✅ ADD
+    private final ProfileCacheService profileCacheService;
 
     private static final int PAGE_SIZE = 100;
     private static final int MAX_PAGES = 10;
 
-    /**
-     * Find duplicate profiles by strategy
-     */
     public Map<String, List<Profile>> findDuplicatesByStrategy(
             String tenantId,
             String strategy) {
 
-        // Load ACTIVE profiles (with cache)
         List<Profile> allProfiles = loadActiveProfiles(tenantId);
 
-        // Apply strategy
         Map<String, List<Profile>> duplicateGroups;
 
         if ("all".equalsIgnoreCase(strategy)) {
@@ -76,9 +62,6 @@ public class DuplicateDetectionService {
     // LOAD ACTIVE PROFILES WITH CACHE
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    /**
-     * ✅ OPTIMIZED: Load ACTIVE profiles with cache support
-     */
     private List<Profile> loadActiveProfiles(String tenantId) {
         List<Profile> allProfiles = new ArrayList<>();
         int currentPage = 0;
@@ -88,7 +71,7 @@ public class DuplicateDetectionService {
         int cacheMisses = 0;
 
         while (hasMore && currentPage < MAX_PAGES) {
-            log.debug("  📄 Loading page {} (size: {})", currentPage, PAGE_SIZE);
+            log.debug("📄 Loading page {} (size: {})", currentPage, PAGE_SIZE);
 
             Page<com.vft.cdp.profile.application.model.ProfileModel> page =
                     profileRepository.findActiveProfiles(
@@ -96,28 +79,23 @@ public class DuplicateDetectionService {
                             org.springframework.data.domain.PageRequest.of(currentPage, PAGE_SIZE)
                     );
 
-            // ✅ NEW: Check cache for each profile before converting
             List<Profile> pageProfiles = new ArrayList<>();
 
             for (com.vft.cdp.profile.application.model.ProfileModel model : page.getContent()) {
 
-                // Try cache first
                 Optional<com.vft.cdp.profile.application.model.ProfileModel> cached =
                         profileCacheService.get(model.getTenantId(), model.getAppId(), model.getUserId());
 
                 if (cached.isPresent()) {
-                    // Cache HIT
                     cacheHits++;
                     pageProfiles.add(convertToDomain(cached.get()));
-                    log.trace("  ✅ Cache HIT: {}|{}|{}",
+                    log.trace("Cache HIT: {}|{}|{}",
                             model.getTenantId(), model.getAppId(), model.getUserId());
                 } else {
-                    // Cache MISS - convert and populate cache
                     cacheMisses++;
                     Profile profile = convertToDomain(model);
                     pageProfiles.add(profile);
 
-                    // ✅ Populate cache
                     profileCacheService.put(
                             profile.getTenantId(),
                             profile.getAppId(),
@@ -125,7 +103,7 @@ public class DuplicateDetectionService {
                             profile
                     );
 
-                    log.trace("  ❌ Cache MISS (populated): {}|{}|{}",
+                    log.trace("❌ Cache MISS (populated): {}|{}|{}",
                             model.getTenantId(), model.getAppId(), model.getUserId());
                 }
             }
@@ -136,16 +114,13 @@ public class DuplicateDetectionService {
         }
 
         if (hasMore) {
-            log.warn("⚠️  Reached max pages limit ({}). Total loaded: {}",
+            log.warn("⚠️ Reached max pages limit ({}). Total loaded: {}",
                     MAX_PAGES, allProfiles.size());
         }
 
         return allProfiles;
     }
 
-    /**
-     * Convert ProfileModel to Domain Profile
-     */
     private Profile convertToDomain(com.vft.cdp.profile.application.model.ProfileModel model) {
         if (model instanceof Profile) {
             return (Profile) model;
@@ -217,15 +192,25 @@ public class DuplicateDetectionService {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MATCHING STRATEGIES (unchanged)
+    // MATCHING STRATEGIES
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+    /**
+     * FIX: ALWAYS return profile with idcard (even if single)
+     *
+     * LOGIC:
+     * - Group profiles by idcard
+     * - For groups with 2+ profiles → Add to duplicates
+     * - For groups with 1 profile → ALSO add to duplicates (NEW!)
+     *   → This ensures single profile gets master profile created
+     */
     private Map<String, List<Profile>> findByIdCard(List<Profile> profiles) {
         if (profiles == null || profiles.isEmpty()) {
-            log.debug("  ⚠️  No profiles to process");
+            log.debug("⚠️ No profiles to process");
             return Collections.emptyMap();
         }
 
+        // Group by idcard
         Map<String, List<Profile>> groups = profiles.stream()
                 .filter(p -> p.getTraits() != null
                         && p.getTraits().getIdcard() != null
@@ -238,27 +223,12 @@ public class DuplicateDetectionService {
             String idcard = entry.getKey();
             List<Profile> groupProfiles = entry.getValue();
 
-            if (groupProfiles.size() >= 2) {
-                duplicates.put("idcard:" + idcard, groupProfiles);
-                continue;
-            }
+            // NEW: ALWAYS add profiles with idcard (even single profile)
+            duplicates.put("idcard:" + idcard, groupProfiles);
 
-            if (groupProfiles.size() == 1) {
-                try {
-                    List<com.vft.cdp.profile.infra.es.document.MasterProfileDocument> existingMasters =
-                            masterProfileRepo.findByTraitsIdcard(idcard);
-
-                    if (!existingMasters.isEmpty()) {
-                        duplicates.put("idcard:" + idcard, groupProfiles);
-                    } else {
-                        log.debug("  ⏭️  Skipping single profile without master: idcard={}, profileId={}",
-                                idcard, groupProfiles.get(0).getUserId());
-                    }
-                } catch (Exception e) {
-                    log.error("  ❌ Error checking master for idcard: {}", idcard, e);
-                }
-            }
         }
+
+        log.info("Found {} groups by idcard (including single profiles)", duplicates.size());
         return duplicates;
     }
 
@@ -275,24 +245,15 @@ public class DuplicateDetectionService {
                     return phone + "|" + dob;
                 }));
 
-        Map<String, List<Profile>> duplicates = new HashMap<>();
+        Map<String, List<Profile>> duplicates = groups.entrySet().stream()
+                .filter(e -> e.getValue().size() >= 2)
+                .filter(e -> !e.getKey().contains("null"))
+                .collect(Collectors.toMap(
+                        e -> "phone_dob:" + e.getKey(),
+                        Map.Entry::getValue
+                ));
 
-        for (Map.Entry<String, List<Profile>> entry : groups.entrySet()) {
-            String key = entry.getKey();
-            List<Profile> groupProfiles = entry.getValue();
-
-            if (groupProfiles.size() >= 2) {
-                duplicates.put("phone_dob:" + key, groupProfiles);
-                continue;
-            }
-
-            String[] parts = key.split("\\|");
-            if (parts.length == 2) {
-                log.debug("  ⏭️  Skipping single profile for phone_dob: {}", key);
-            }
-        }
-
-        log.debug("  ✅ Found {} duplicate groups by phone_dob", duplicates.size());
+        log.debug("Found {} duplicate groups by phone_dob", duplicates.size());
         return duplicates;
     }
 
@@ -317,7 +278,7 @@ public class DuplicateDetectionService {
                         Map.Entry::getValue
                 ));
 
-        log.debug("  ✅ Found {} duplicate groups by email_name", duplicates.size());
+        log.debug("Found {} duplicate groups by email_name", duplicates.size());
         return duplicates;
     }
 
@@ -342,12 +303,12 @@ public class DuplicateDetectionService {
                         Map.Entry::getValue
                 ));
 
-        log.debug("  ✅ Found {} duplicate groups by phone_name", duplicates.size());
+        log.debug("Found {} duplicate groups by phone_name", duplicates.size());
         return duplicates;
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // NORMALIZATION HELPERS (unchanged)
+    // NORMALIZATION HELPERS
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private String normalizePhone(String phone) {

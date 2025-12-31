@@ -115,7 +115,7 @@ public class ProfileService {
         }
 
         try {
-            log.info("🧹 Cleaning up master profile reference: masterId={}", masterId);
+            log.info("Cleaning up master profile reference: masterId={}", masterId);
 
             // Find master profile by ID
             Optional<MasterProfile> masterOpt = masterProfileRepository.findById(masterId);

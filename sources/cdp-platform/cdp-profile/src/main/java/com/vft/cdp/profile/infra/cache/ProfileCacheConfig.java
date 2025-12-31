@@ -94,7 +94,7 @@ public class ProfileCacheConfig {
                 "master-profiles"    //NEW: Master profiles
         ));
 
-        log.info("✅ Caffeine Cache Manager initialized with caches: profiles-hot, master-profiles");
+        log.info("Caffeine Cache Manager initialized with caches: profiles-hot, master-profiles");
 
         return cacheManager;
     }
@@ -156,7 +156,7 @@ public class ProfileCacheConfig {
         cacheConfigs.put("profiles-search",
                 defaultConfig.entryTtl(Duration.ofMinutes(60)));
 
-        log.info("✅ Redis Cache Manager initialized:");
+        log.info("Redis Cache Manager initialized:");
         log.info("   - profiles-hot: 60 min TTL");
         log.info("   - master-profiles: 60 min TTL (NEW)");
         log.info("   - profiles-search: 60 min TTL");

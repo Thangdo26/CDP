@@ -53,7 +53,7 @@ public class ProfileCacheService {
                 // Populate L1
                 if (l1Cache != null) {
                     l1Cache.put(key, profile);
-                    log.debug("📝 Populated L1 cache: {}", key);
+                    log.debug("Populated L1 cache: {}", key);
                 }
 
                 return Optional.of(profile);
@@ -74,14 +74,14 @@ public class ProfileCacheService {
         Cache l1Cache = caffeineCacheManager.getCache(CACHE_NAME);
         if (l1Cache != null) {
             l1Cache.put(key, profile);
-            log.debug("📝 L1 Cache PUT: {}", key);
+            log.debug("L1 Cache PUT: {}", key);
         }
 
         // Write to L2
         Cache l2Cache = redisCacheManager.getCache(CACHE_NAME);
         if (l2Cache != null) {
             l2Cache.put(key, profile);
-            log.debug("📝 L2 Cache PUT: {}", key);
+            log.debug("L2 Cache PUT: {}", key);
         }
     }
 

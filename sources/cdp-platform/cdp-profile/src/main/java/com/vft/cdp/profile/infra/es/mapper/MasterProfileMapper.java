@@ -12,12 +12,11 @@ import java.util.stream.Collectors;
 @Slf4j
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * MASTER PROFILE MAPPER - CORRECTED
+ * MASTER PROFILE MAPPER - FIXED
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- *  FIX: Changed method references to lambda expressions
- *  Profile.getTraits() returns ProfileModel.TraitsModel (interface)
- *  Must call methods on interface, not concrete class
+ * FIX 1: Copy ALL data from newest profile (platforms, campaign)
+ * FIX 2: Correct method signatures for Profile interfaces
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 public final class MasterProfileMapper {
@@ -26,18 +25,18 @@ public final class MasterProfileMapper {
         throw new AssertionError("Utility class");
     }
 
-    
+
     // MERGE PROFILES → MASTER PROFILE
-    
+
 
     public static MasterProfile mergeProfiles(List<Profile> profiles) {
         if (profiles == null || profiles.isEmpty()) {
             throw new IllegalArgumentException("Cannot merge empty profile list");
         }
 
-        
+
         // Sort profiles by last_seen_at DESC (newest first)
-        
+
 
         List<Profile> sortedProfiles = profiles.stream()
                 .sorted((p1, p2) -> {
@@ -45,13 +44,15 @@ public final class MasterProfileMapper {
                     Instant t2 = p2.getLastSeenAt();
 
                     if (t1 == null && t2 == null) return 0;
-                    if (t1 == null) return 1;  // null last
-                    if (t2 == null) return -1; // null last
+                    if (t1 == null) return 1;
+                    if (t2 == null) return -1;
 
                     return t2.compareTo(t1);
                 })
                 .collect(Collectors.toList());
 
+        // NEWEST profile (first after sort)
+        Profile newestProfile = sortedProfiles.get(0);
         Profile firstProfile = profiles.get(0);
 
         Instant now = Instant.now();
@@ -62,6 +63,7 @@ public final class MasterProfileMapper {
                 .map(p -> buildProfileId(p.getTenantId(), p.getAppId(), p.getUserId()))
                 .collect(Collectors.toList());
 
+        // FIX: Remove () from method reference
         List<String> appIds = profiles.stream()
                 .map(Profile::getAppId)
                 .distinct()
@@ -70,23 +72,32 @@ public final class MasterProfileMapper {
         // Merge traits with priority to newest profile
         MasterProfile.MasterTraits masterTraits = mergeTraitsWithPriority(sortedProfiles);
 
-        
-        //Calculate timestamps correctly
-        
+        // NEW: Copy platforms from NEWEST profile (using ProfileModel interface)
+        MasterProfile.MasterPlatforms masterPlatforms =
+                convertPlatformsFromModel(newestProfile.getPlatforms());
 
-        // First seen at = MIN from all profiles
+        // NEW: Copy campaign from NEWEST profile (using ProfileModel interface)
+        MasterProfile.MasterCampaign masterCampaign =
+                convertCampaignFromModel(newestProfile.getCampaign());
+
+
+        // Calculate timestamps
+
+
         Instant firstSeenAt = profiles.stream()
                 .map(Profile::getFirstSeenAt)
                 .filter(Objects::nonNull)
                 .min(Instant::compareTo)
                 .orElse(now);
 
-        //Last seen at = MAX from all profiles
         Instant lastSeenAt = profiles.stream()
                 .map(Profile::getLastSeenAt)
                 .filter(Objects::nonNull)
                 .max(Instant::compareTo)
                 .orElse(now);
+
+        log.info("📦 Creating master from {} profiles (newest: {})",
+                profiles.size(), newestProfile.getUserId());
 
         return MasterProfile.builder()
                 .profileId(masterProfileId)
@@ -97,6 +108,8 @@ public final class MasterProfileMapper {
                 .deviceId(new ArrayList<>())
                 .mergedIds(mergedIds)
                 .traits(masterTraits)
+                .platforms(masterPlatforms)      // NEW
+                .campaign(masterCampaign)        // NEW
                 .segments(new ArrayList<>())
                 .scores(new HashMap<>())
                 .consents(new HashMap<>())
@@ -109,12 +122,13 @@ public final class MasterProfileMapper {
                 .build();
     }
 
-    
+
     // MERGE TRAITS FROM MULTIPLE PROFILES
-    
+
 
     private static MasterProfile.MasterTraits mergeTraitsWithPriority(List<Profile> profiles) {
 
+        // Aggregate emails
         List<String> emails = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
@@ -124,6 +138,7 @@ public final class MasterProfileMapper {
                 .distinct()
                 .collect(Collectors.toList());
 
+        // Aggregate phones
         List<String> phones = profiles.stream()
                 .map(Profile::getTraits)
                 .filter(Objects::nonNull)
@@ -133,6 +148,7 @@ public final class MasterProfileMapper {
                 .distinct()
                 .collect(Collectors.toList());
 
+        // Aggregate user IDs
         List<String> userIds = profiles.stream()
                 .map(Profile::getUserId)
                 .filter(Objects::nonNull)
@@ -140,11 +156,9 @@ public final class MasterProfileMapper {
                 .distinct()
                 .collect(Collectors.toList());
 
-        
-        //SINGLE VALUE FIELDS - WITH NULL FALLBACK
-        // Profiles already sorted by last_seen_at DESC
-        // Get first NON-NULL value
-        
+
+        // SINGLE VALUE FIELDS - FROM NEWEST (first in sorted list)
+
 
         String fullName = profiles.stream()
                 .map(Profile::getTraits)
@@ -160,7 +174,7 @@ public final class MasterProfileMapper {
                 .filter(Objects::nonNull)
                 .map(traits -> traits.getFirstName())
                 .filter(Objects::nonNull)
-                .filter(s -> !s.isBlank())  //
+                .filter(s -> !s.isBlank())
                 .findFirst()
                 .orElse(null);
 
@@ -243,9 +257,41 @@ public final class MasterProfileMapper {
                 .build();
     }
 
-    
+    /**
+     * NEW: Convert platforms from ProfileModel interface
+     */
+    private static MasterProfile.MasterPlatforms convertPlatformsFromModel(
+            com.vft.cdp.profile.application.model.ProfileModel.PlatformsModel platforms) {
+        if (platforms == null) return null;
+
+        return MasterProfile.MasterPlatforms.builder()
+                .os(platforms.getOs())
+                .device(platforms.getDevice())
+                .browser(platforms.getBrowser())
+                .appVersion(platforms.getAppVersion())
+                .build();
+    }
+
+    /**
+     * NEW: Convert campaign from ProfileModel interface
+     */
+    private static MasterProfile.MasterCampaign convertCampaignFromModel(
+            com.vft.cdp.profile.application.model.ProfileModel.CampaignModel campaign) {
+        if (campaign == null) return null;
+
+        return MasterProfile.MasterCampaign.builder()
+                .utmSource(campaign.getUtmSource())
+                .utmCampaign(campaign.getUtmCampaign())
+                .utmMedium(campaign.getUtmMedium())
+                .utmContent(campaign.getUtmContent())
+                .utmTerm(campaign.getUtmTerm())
+                .utmCustom(campaign.getUtmCustom())
+                .build();
+    }
+
+
     // DOMAIN → DOCUMENT
-    
+
 
     public static MasterProfileDocument toDocument(MasterProfile master) {
         if (master == null) return null;
@@ -258,12 +304,9 @@ public final class MasterProfileMapper {
                 .status(master.getStatus())
                 .mergedProfileIds(master.getMergedIds())
                 .mergeCount(master.getMergedIds() != null ? master.getMergedIds().size() : 0)
-
-                //  FIXED: Map platforms and campaign (not null!)
                 .traits(mapTraitsToDoc(master.getTraits()))
-                .platforms(mapPlatformsToDoc(master.getPlatforms()))  //  NEW
-                .campaign(mapCampaignToDoc(master.getCampaign()))      //  NEW
-
+                .platforms(mapPlatformsToDoc(master.getPlatforms()))
+                .campaign(mapCampaignToDoc(master.getCampaign()))
                 .metadata(new HashMap<>())
                 .createdAt(master.getCreatedAt())
                 .updatedAt(master.getUpdatedAt())
@@ -273,9 +316,9 @@ public final class MasterProfileMapper {
                 .build();
     }
 
-    
+
     // DOCUMENT → DOMAIN
-    
+
 
     public static MasterProfile toDomain(MasterProfileDocument doc) {
         if (doc == null) return null;
@@ -289,6 +332,8 @@ public final class MasterProfileMapper {
                 .deviceId(new ArrayList<>())
                 .mergedIds(doc.getMergedProfileIds() != null ? doc.getMergedProfileIds() : new ArrayList<>())
                 .traits(mapTraitsToDomain(doc.getTraits()))
+                .platforms(mapPlatformsToDomain(doc.getPlatforms()))
+                .campaign(mapCampaignToDomain(doc.getCampaign()))
                 .segments(new ArrayList<>())
                 .scores(new HashMap<>())
                 .consents(new HashMap<>())
@@ -301,9 +346,9 @@ public final class MasterProfileMapper {
                 .build();
     }
 
-    
-    // HELPER METHODS
-    
+
+    // HELPER METHODS - Document Mapping
+
 
     private static MasterProfileDocument.Platforms mapPlatformsToDoc(
             com.vft.cdp.profile.application.model.MasterProfileModel.PlatformsModel platforms) {
@@ -318,9 +363,6 @@ public final class MasterProfileMapper {
                 .build();
     }
 
-    /**
-     *  NEW: Map campaign to document
-     */
     private static MasterProfileDocument.Campaign mapCampaignToDoc(
             com.vft.cdp.profile.application.model.MasterProfileModel.CampaignModel campaign) {
 
@@ -336,28 +378,20 @@ public final class MasterProfileMapper {
                 .build();
     }
 
-    // Overload for MasterProfileModel.MasterTraitsModel (interface)
     private static MasterProfileDocument.Traits mapTraitsToDoc(
             com.vft.cdp.profile.application.model.MasterProfileModel.MasterTraitsModel traits) {
         if (traits == null) return null;
 
         return MasterProfileDocument.Traits.builder()
-                // Keep as list
                 .email(traits.getEmail() != null ? new ArrayList<>(traits.getEmail()) : new ArrayList<>())
                 .phone(traits.getPhone() != null ? new ArrayList<>(traits.getPhone()) : new ArrayList<>())
                 .userId(traits.getUserId() != null ? new ArrayList<>(traits.getUserId()) : new ArrayList<>())
-
-                // Single values
-                .fullName(traits.getFirstName() != null && traits.getLastName() != null
-                        ? traits.getFirstName() + " " + traits.getLastName()
-                        : null)
+                .fullName(traits.getFullName())
                 .firstName(traits.getFirstName())
                 .lastName(traits.getLastName())
                 .gender(traits.getGender())
                 .dob(traits.getDob())
                 .address(traits.getAddress())
-
-                // NEW: Map idcard, oldIdcard, religion
                 .idcard(traits.getIdcard())
                 .oldIdcard(traits.getOldIdcard())
                 .religion(traits.getReligion())
@@ -368,7 +402,6 @@ public final class MasterProfileMapper {
         if (traits == null) return null;
 
         return MasterProfile.MasterTraits.builder()
-                //  FIXED: Already List<String>
                 .email(traits.getEmail() != null ? new ArrayList<>(traits.getEmail()) : new ArrayList<>())
                 .phone(traits.getPhone() != null ? new ArrayList<>(traits.getPhone()) : new ArrayList<>())
                 .userId(traits.getUserId() != null ? new ArrayList<>(traits.getUserId()) : new ArrayList<>())
@@ -378,11 +411,41 @@ public final class MasterProfileMapper {
                 .gender(traits.getGender())
                 .dob(traits.getDob())
                 .address(traits.getAddress())
-
-                //  NEW: Map idcard, oldIdcard, religion
                 .idcard(traits.getIdcard())
                 .oldIdcard(traits.getOldIdcard())
                 .religion(traits.getReligion())
+                .build();
+    }
+
+    /**
+     * NEW: Map platforms from document to domain
+     */
+    private static MasterProfile.MasterPlatforms mapPlatformsToDomain(
+            MasterProfileDocument.Platforms platforms) {
+        if (platforms == null) return null;
+
+        return MasterProfile.MasterPlatforms.builder()
+                .os(platforms.getOs())
+                .device(platforms.getDevice())
+                .browser(platforms.getBrowser())
+                .appVersion(platforms.getAppVersion())
+                .build();
+    }
+
+    /**
+     * NEW: Map campaign from document to domain
+     */
+    private static MasterProfile.MasterCampaign mapCampaignToDomain(
+            MasterProfileDocument.Campaign campaign) {
+        if (campaign == null) return null;
+
+        return MasterProfile.MasterCampaign.builder()
+                .utmSource(campaign.getUtmSource())
+                .utmCampaign(campaign.getUtmCampaign())
+                .utmMedium(campaign.getUtmMedium())
+                .utmContent(campaign.getUtmContent())
+                .utmTerm(campaign.getUtmTerm())
+                .utmCustom(campaign.getUtmCustom())
                 .build();
     }
 
@@ -394,5 +457,4 @@ public final class MasterProfileMapper {
     private static String buildProfileId(String tenantId, String appId, String userId) {
         return tenantId + "|" + appId + "|" + userId;
     }
-
 }

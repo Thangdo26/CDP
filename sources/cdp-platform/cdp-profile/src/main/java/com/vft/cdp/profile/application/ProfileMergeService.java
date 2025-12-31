@@ -32,7 +32,6 @@ import java.util.stream.Stream;
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * PROFILE MERGE SERVICE - PURE DOMAIN
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- *
  *  NO EnrichedProfile - uses Domain Profile only
  *  GUARANTEES:
  * 1. UNIQUENESS: One person = One master profile
@@ -166,7 +165,7 @@ public class ProfileMergeService {
             }
         }
         if (!createdMasterIds.isEmpty()) {
-            log.info("🧹 Invalidating cache for {} newly created master profiles",
+            log.info("Invalidating cache for {} newly created master profiles",
                     createdMasterIds.size());
             masterProfileCache.evictMultiple(createdMasterIds);
         }
@@ -627,7 +626,7 @@ public class ProfileMergeService {
         // Case 1: Current value is null/blank → Always update
         if (currentValue == null || currentValue.isBlank()) {
             setTraitField(traits, fieldName, newValue);
-            log.debug("  📝 Updated {}: {} (was null)", fieldName, newValue);
+            log.debug("  Updated {}: {} (was null)", fieldName, newValue);
             return;
         }
 
@@ -915,33 +914,57 @@ public class ProfileMergeService {
 
     
     // MARK PROFILES AS MERGED
-    
+
 
     private void markProfilesAsMerged(
             List<Profile> profiles,
             String masterProfileId) {
 
+        if (profiles == null || profiles.isEmpty()) {
+            log.debug("⚠️ No profiles to mark as merged");
+            return;
+        }
+
+        log.info("📝 Marking {} profiles as merged to master: {}",
+                profiles.size(), masterProfileId);
+
+        List<String> failedIds = new ArrayList<>();
+
         for (Profile profile : profiles) {
+            String profileId = null;
             try {
-                String profileId = ProfileMapper.buildId(
+                profileId = ProfileMapper.buildId(
                         profile.getTenantId(),
                         profile.getAppId(),
                         profile.getUserId()
                 );
 
                 ProfileDocument doc = profileRepo.findById(profileId).orElse(null);
-                if (doc != null) {
-                    doc.setStatus("merged");
-                    doc.setMergedToMasterId(masterProfileId);
-                    doc.setMergedAt(Instant.now());
-                    doc.setUpdatedAt(Instant.now());
 
-                    profileRepo.save(doc);
-                    log.debug("     Marked as merged: {}", profileId);
+                if (doc == null) {
+                    log.warn("⚠️ Profile not found in ES: {}", profileId);
+                    continue;
                 }
+
+                doc.setStatus("merged");
+                doc.setMergedToMasterId(masterProfileId);
+                doc.setMergedAt(Instant.now());
+                doc.setUpdatedAt(Instant.now());
+
+                profileRepo.save(doc);
+
+                profileCacheService.evict(
+                        profile.getTenantId(),
+                        profile.getAppId(),
+                        profile.getUserId()
+                );
+
+                log.debug("Marked as merged: {}", profileId);
+
             } catch (Exception ex) {
-                log.error("    ❌ Failed to mark profile as merged: {}",
-                        profile.getUserId(), ex);
+                failedIds.add(profileId != null ? profileId : profile.getUserId());
+                log.error("❌ Failed to mark profile as merged: {}",
+                        profileId, ex);
             }
         }
     }
@@ -950,29 +973,70 @@ public class ProfileMergeService {
             List<String> profileIds,
             String newMasterProfileId) {
 
-        if (profileIds == null) return;
+        if (profileIds == null || profileIds.isEmpty()) {
+            log.debug("⚠️ No profile references to update");
+            return;
+        }
+
+        log.info("🔄 Updating {} profile references to master: {}",
+                profileIds.size(), newMasterProfileId);
+
+        int successCount = 0;
+        int failCount = 0;
+        List<String> failedIds = new ArrayList<>();
 
         for (String profileId : profileIds) {
             try {
                 ProfileDocument doc = profileRepo.findById(profileId).orElse(null);
-                if (doc != null) {
-                    doc.setStatus("merged");
-                    doc.setMergedToMasterId(newMasterProfileId);
-                    doc.setMergedAt(Instant.now());
-                    doc.setUpdatedAt(Instant.now());
 
-                    profileRepo.save(doc);
+                if (doc == null) {
+                    log.warn("Profile not found in ES: {}", profileId);
+                    failCount++;
+                    failedIds.add(profileId);
+                    continue;
                 }
+
+                doc.setStatus("merged");
+                doc.setMergedToMasterId(newMasterProfileId);
+                doc.setMergedAt(Instant.now());
+                doc.setUpdatedAt(Instant.now());
+
+                profileRepo.save(doc);
+
+                // ADD THIS: PARSE profileId and EVICT CACHE!
+                String[] parts = profileId.split("\\|");
+                if (parts.length == 3) {
+                    profileCacheService.evict(parts[0], parts[1], parts[2]);
+                    log.debug("Evicted cache: {}", profileId);
+                } else {
+                    log.warn("⚠️ Invalid profileId format: {}", profileId);
+                }
+
+                successCount++;
+                log.debug("Updated profile reference: {}", profileId);
+
             } catch (Exception ex) {
-                log.error("Failed to update profile reference: {}", profileId, ex);
+                failCount++;
+                failedIds.add(profileId);
+                log.error("❌ Failed to update profile reference: {}",
+                        profileId, ex);
             }
+        }
+
+        log.info("📊 Update summary: {} succeeded, ❌ {} failed",
+                successCount, failCount);
+
+        // ADD THIS: THROW if any failed
+        if (failCount > 0) {
+            throw new RuntimeException(
+                    String.format("Failed to update %d profile references: %s",
+                            failCount, failedIds)
+            );
         }
     }
 
     
     // RESOLVE REMAINING CONFLICTS
-    
-
     private int resolveRemainingConflicts(String tenantId) {
         log.info("🔍 Resolving remaining conflicts...");
 
@@ -1101,7 +1165,7 @@ public class ProfileMergeService {
         
 
         masterProfileCache.put(masterProfile.getProfileId(), dto);
-        log.info("📝 Cached newly merged master profile: masterId={}", masterProfile.getProfileId());
+        log.info("Cached newly merged master profile: masterId={}", masterProfile.getProfileId());
 
         return dto;
     }
@@ -1109,7 +1173,7 @@ public class ProfileMergeService {
     public MasterProfileDTO getMasterProfile(String masterProfileId) {
         Optional<MasterProfileDTO> cached = masterProfileCache.get(masterProfileId);
         if (cached.isPresent()) {
-            log.info("✅ Cache HIT: masterId={}", masterProfileId);
+            log.info("Cache HIT: masterId={}", masterProfileId);
             return cached.get();
         }
         log.debug("❌ Cache MISS: masterId={}, loading from ES", masterProfileId);
@@ -1129,7 +1193,7 @@ public class ProfileMergeService {
         
 
         masterProfileCache.put(masterProfileId, dto);
-        log.info("📝 Cached master profile: masterId={}", masterProfileId);
+        log.info("Cached master profile: masterId={}", masterProfileId);
         return dto;
     }
 
@@ -1160,17 +1224,17 @@ public class ProfileMergeService {
                 String appId = parts[1];
                 String userId = parts[2];
 
-                // ✅ STEP 1: Check cache first
+                // STEP 1: Check cache first
                 Optional<com.vft.cdp.profile.application.model.ProfileModel> cachedOpt =
                         profileCacheService.get(tenantId, appId, userId);
 
                 if (cachedOpt.isPresent()) {
-                    // ✅ Cache HIT - convert to domain
+                    // Cache HIT - convert to domain
                     cacheHits++;
                     Profile profile = convertToDomain(cachedOpt.get());
                     profiles.add(profile);
 
-                    log.trace("  ✅ Cache HIT: {}", profileId);
+                    log.trace("  Cache HIT: {}", profileId);
 
                 } else {
                     // ❌ Cache MISS - load from ES
@@ -1183,7 +1247,7 @@ public class ProfileMergeService {
                         Profile profile = com.vft.cdp.profile.infra.es.mapper.ProfileMapper.toDomain(doc);
                         profiles.add(profile);
 
-                        // ✅ Populate cache for future use
+                        // Populate cache for future use
                         profileCacheService.put(tenantId, appId, userId, profile);
 
                         log.trace("  ❌ Cache MISS (populated): {}", profileId);
@@ -1197,11 +1261,11 @@ public class ProfileMergeService {
             }
         }
 
-        // ✅ Log cache performance stats
+        // Log cache performance stats
         int total = cacheHits + cacheMisses;
         if (total > 0) {
             double hitRate = (cacheHits * 100.0) / total;
-            log.info("📊 Profile Load Stats: {} total, ✅ {}  hits ({:.1f}%), ❌ {} misses",
+            log.info("📊 Profile Load Stats: {} total, {}  hits ({:.1f}%), ❌ {} misses",
                     total, cacheHits, hitRate, cacheMisses);
 
             // ⚠️ Alert if cache hit rate is low

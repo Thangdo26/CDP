@@ -81,7 +81,7 @@ public class MasterProfileCacheService {
         if (l1Cache != null) {
             MasterProfileDTO dto = l1Cache.get(key, MasterProfileDTO.class);
             if (dto != null) {
-                log.debug("✅ L1 Cache HIT: {}", key);
+                log.debug("L1 Cache HIT: {}", key);
                 return Optional.of(dto);
             }
         }
@@ -94,12 +94,12 @@ public class MasterProfileCacheService {
         if (l2Cache != null) {
             MasterProfileDTO dto = l2Cache.get(key, MasterProfileDTO.class);
             if (dto != null) {
-                log.debug("✅ L2 Cache HIT: {}", key);
+                log.debug("L2 Cache HIT: {}", key);
 
                 // Populate L1 cache for future requests
                 if (l1Cache != null) {
                     l1Cache.put(key, dto);
-                    log.debug("📝 Populated L1 cache: {}", key);
+                    log.debug("Populated L1 cache: {}", key);
                 }
 
                 return Optional.of(dto);
@@ -141,7 +141,7 @@ public class MasterProfileCacheService {
         Cache l1Cache = caffeineCacheManager.getCache(CACHE_NAME);
         if (l1Cache != null) {
             l1Cache.put(key, dto);
-            log.debug("📝 L1 Cache PUT: {} (profile_id={})", key, dto.getProfileId());
+            log.debug("L1 Cache PUT: {} (profile_id={})", key, dto.getProfileId());
         }
 
         
@@ -151,10 +151,10 @@ public class MasterProfileCacheService {
         Cache l2Cache = redisCacheManager.getCache(CACHE_NAME);
         if (l2Cache != null) {
             l2Cache.put(key, dto);
-            log.debug("📝 L2 Cache PUT: {} (profile_id={})", key, dto.getProfileId());
+            log.debug("L2 Cache PUT: {} (profile_id={})", key, dto.getProfileId());
         }
 
-        log.info("✅ Master profile cached: masterId={}, mergedCount={}",
+        log.info("Master profile cached: masterId={}, mergedCount={}",
                 masterId, dto.getMergedIds() != null ? dto.getMergedIds().size() : 0);
     }
 
@@ -196,7 +196,7 @@ public class MasterProfileCacheService {
             log.debug("🗑️  L2 Cache EVICT: {}", key);
         }
 
-        log.info("🧹 Master profile evicted from cache: masterId={}", masterId);
+        log.info("Master profile evicted from cache: masterId={}", masterId);
     }
 
     /**
@@ -209,7 +209,7 @@ public class MasterProfileCacheService {
             return;
         }
 
-        log.info("🧹 Batch evicting {} master profiles", masterIds.size());
+        log.info("Batch evicting {} master profiles", masterIds.size());
 
         for (String masterId : masterIds) {
             evict(masterId);
@@ -236,7 +236,7 @@ public class MasterProfileCacheService {
             log.warn("🗑️  L2 Cache CLEARED (master-profiles)");
         }
 
-        log.warn("✅ All master profile caches cleared");
+        log.warn("All master profile caches cleared");
     }
 
     

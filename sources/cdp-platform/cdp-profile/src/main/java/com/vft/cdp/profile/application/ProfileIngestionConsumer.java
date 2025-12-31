@@ -20,8 +20,8 @@ import org.springframework.stereotype.Service;
  * FLOW:
  * Kafka (RawProfile) → Convert to Command → ProfileService → ES
  *
- * ✅ No EnrichedProfile - convert directly to domain
- * ✅ Use ProfileService for business logic
+ * No EnrichedProfile - convert directly to domain
+ * Use ProfileService for business logic
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -49,11 +49,11 @@ public class ProfileIngestionConsumer {
                 rawProfile.getUserId());
 
         try {
-            // ✅ Use mapper
+            // Use mapper
             CreateProfileCommand command = commandMapper.toCommand(rawProfile);
             ProfileDTO saved = profileService.createProfile(command);
 
-            log.info("✅ Profile saved to ES: {}|{}|{}",
+            log.info("Profile saved to ES: {}|{}|{}",
                     saved.getTenantId(),
                     saved.getAppId(),
                     saved.getUserId());
