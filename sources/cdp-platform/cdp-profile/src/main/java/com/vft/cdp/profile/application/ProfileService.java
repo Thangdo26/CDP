@@ -17,7 +17,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import com.vft.cdp.profile.infra.es.mapper.ProfileMapper;
-import com.vft.cdp.profile.domain.MasterProfile;
+
 
 import java.util.*;
 import java.time.Instant;
@@ -40,7 +40,7 @@ public class ProfileService {
 
     private final ProfileRepository profileRepository;
     private final ProfileCacheService cacheService;
-    private final com.vft.cdp.profile.application.repository.MasterProfileRepository masterProfileRepository;
+
 
     
     // CREATE PROFILE
@@ -90,16 +90,6 @@ public class ProfileService {
             savedModel = profileRepository.save(newProfile);
         }
 
-        //  Cleanup master if reactivated
-        if (reactivatedFromMasterId != null) {
-            cleanupMasterProfileReference(
-                    command.getTenantId(),
-                    command.getAppId(),
-                    command.getUserId(),
-                    reactivatedFromMasterId
-            );
-        }
-
         cacheService.put(
                 savedModel.getTenantId(),
                 savedModel.getAppId(),
@@ -108,56 +98,6 @@ public class ProfileService {
         );
 
         return ProfileDTOMapper.toDTO(savedModel);
-    }
-    private void cleanupMasterProfileReference(String tenantId, String appId, String userId, String masterId) {
-        if (masterId == null || masterId.isBlank()) {
-            return;
-        }
-
-        try {
-            log.info("Cleaning up master profile reference: masterId={}", masterId);
-
-            // Find master profile by ID
-            Optional<MasterProfile> masterOpt = masterProfileRepository.findById(masterId);
-
-            if (masterOpt.isEmpty()) {
-                log.warn("⚠️  Master profile not found during cleanup: {}", masterId);
-                return;
-            }
-
-            MasterProfile master = masterOpt.get();
-            String profileId = ProfileMapper.buildId(tenantId, appId, userId);
-
-            // Check if profile is in master's mergedIds
-            if (master.getMergedIds() != null && master.getMergedIds().contains(profileId)) {
-
-                // Remove this profile from mergedIds
-                List<String> updatedMergedIds = new ArrayList<>(master.getMergedIds());
-                boolean removed = updatedMergedIds.remove(profileId);
-
-                if (removed) {
-                    master.setMergedIds(updatedMergedIds);
-                    master.setUpdatedAt(Instant.now());
-                    master.setVersion(master.getVersion() != null ? master.getVersion() + 1 : 1);
-
-                    masterProfileRepository.save(master);
-
-                    log.info(" Removed profile from master: masterId={}, remaining={} profiles",
-                            masterId, updatedMergedIds.size());
-
-                    // Note: We don't delete master even if mergedIds becomes empty
-                    // Master profile can exist without merged profiles
-                }
-
-            } else {
-                log.debug("ℹ️  Profile not in master's mergedIds: profileId={}, masterId={}",
-                        profileId, masterId);
-            }
-
-        } catch (Exception ex) {
-            log.error("❌ Failed to cleanup master profile reference: masterId={}", masterId, ex);
-            // Don't throw - this is cleanup, shouldn't block main operation
-        }
     }
 
     
@@ -211,16 +151,6 @@ public class ProfileService {
         }
 
         ProfileModel saved = profileRepository.save(profile);
-
-        //  Cleanup master if reactivated
-        if (reactivatedFromMasterId != null) {
-            cleanupMasterProfileReference(
-                    command.getTenantId(),
-                    command.getAppId(),
-                    command.getUserId(),
-                    reactivatedFromMasterId
-            );
-        }
 
         cacheService.put(
                 command.getTenantId(),

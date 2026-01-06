@@ -295,7 +295,7 @@ def main():
     
     # Generate ID pools
     print(f"\n Generating ID pools...")
-    idcard_pool = [f"{fake.random_int(min=100000000000, max=999999999999)}" 
+    idcard_pool = [f"{fake.random_int(min=100000000000, max=100000000095)}" 
                    for _ in range(config.NUM_UNIQUE_IDCARDS)]
     old_idcard_pool = [f"{fake.random_int(min=100000000, max=999999999)}" 
                        for _ in range(config.NUM_UNIQUE_IDCARDS)]

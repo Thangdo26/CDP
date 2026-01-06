@@ -43,11 +43,6 @@ public class ProfileIngestionConsumer {
             return;
         }
 
-        log.info("📨 Received RawProfile from Kafka: tenant={}, app={}, user={}",
-                rawProfile.getTenantId(),
-                rawProfile.getAppId(),
-                rawProfile.getUserId());
-
         try {
             // Use mapper
             CreateProfileCommand command = commandMapper.toCommand(rawProfile);
