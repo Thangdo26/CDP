@@ -6,6 +6,7 @@ import com.vft.cdp.profile.domain.ProfileStatus;
 import com.vft.cdp.profile.infra.es.document.ProfileDocument;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -50,7 +51,7 @@ public final class ProfileMapper {
      */
     public static String buildIdcardBasedId(String idcard) {
         if (idcard != null && !idcard.isBlank()) {
-            return "idcard:" + idcard;
+            return idcard;
         }
         return null;
     }
@@ -63,11 +64,10 @@ public final class ProfileMapper {
         if (profile.getTraits() != null && profile.getTraits().getIdcard() != null) {
             String idcard = profile.getTraits().getIdcard();
             if (!idcard.isBlank()) {
-                return "idcard:" + idcard;
+                return idcard;
             }
         }
-        // Use document helper for UUID generation
-        return ProfileDocument.generateProfileId(null);
+        return UUID.randomUUID().toString();
     }
 
     /**
@@ -78,42 +78,14 @@ public final class ProfileMapper {
         if (model.getTraits() != null && model.getTraits().getIdcard() != null) {
             String idcard = model.getTraits().getIdcard();
             if (!idcard.isBlank()) {
-                return "idcard:" + idcard;
+                return idcard;
             }
         }
-        // Use document helper for UUID generation
-        return ProfileDocument.generateProfileId(null);
+        return UUID.randomUUID().toString();
     }
 
-    /**
-     * Build profile ID from idcard (prefer) or generate UUID
-     */
-    public static String buildProfileId(String idcard) {
-        return ProfileDocument.generateProfileId(idcard);
-    }
-
-    /**
-     * Check if ID is idcard-based
-     */
-    public static boolean isIdcardBasedId(String id) {
-        return id != null && id.startsWith("idcard:");
-    }
-
-    /**
-     * Check if ID is uuid-based
-     */
     public static boolean isUuidBasedId(String id) {
         return id != null && id.startsWith("uuid:");
-    }
-
-    /**
-     * Extract idcard from idcard-based ID
-     */
-    public static String extractIdcard(String profileId) {
-        if (isIdcardBasedId(profileId)) {
-            return profileId.substring("idcard:".length());
-        }
-        return null;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -286,7 +258,7 @@ public final class ProfileMapper {
     // HELPER MAPPERS - Domain → Document
     // ═══════════════════════════════════════════════════════════════
 
-    private static List<ProfileDocument.UserIdentity> mapUsersToDoc(List<Profile.UserIdentity> users) {
+    private static List<ProfileDocument.UserIdentity> mapUsersToDoc(List<? extends ProfileModel.UserIdentityModel> users) {
         if (users == null) {
             return null;
         }
@@ -299,7 +271,8 @@ public final class ProfileMapper {
                 .collect(Collectors.toList());
     }
 
-    // NEW: Map users to domain
+
+    // ✅ NEW: Map users to domain
     private static List<Profile.UserIdentity> mapUsersToDomain(List<ProfileDocument.UserIdentity> users) {
         if (users == null) {
             return null;

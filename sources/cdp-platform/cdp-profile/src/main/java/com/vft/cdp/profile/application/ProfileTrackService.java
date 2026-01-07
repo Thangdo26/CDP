@@ -18,13 +18,13 @@ import java.util.*;
 
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * PROFILE TRACK SERVICE - FIXED
+ * PROFILE TRACK SERVICE - FIXED MERGE LOGIC
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
  * FIXES:
- * 1. Correct profileId generation and storage
- * 2. Cache AFTER merge/track completes
- * 3. Proper mapping creation with correct profileId
+ * 1. Merge traits properly (keep existing data)
+ * 2. Preserve users[] array when updating
+ * 3. Add new user to existing users[] array
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -60,20 +60,17 @@ public class ProfileTrackService {
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // STEP 2: Merge Service - Find by idcard
+        // STEP 2: Merge Service - Find by idcard + tenant
         // ═══════════════════════════════════════════════════════════════
-        return handleMergeService(command, incomingUpdatedAt);
+        return handleMergeByIdcard(command, incomingUpdatedAt);
     }
-
-    /**
-     * Handle existing mapping
-     */
+    
     private ProcessResult handleExistingMapping(
             String profileId,
             CreateProfileCommand command,
             Instant incomingUpdatedAt
     ) {
-        log.info("📋 Found existing mapping → profile_id={}", profileId);
+        log.info("Found existing mapping → profile_id={}", profileId);
 
         Optional<ProfileModel> profileOpt = profileRepository.findById(profileId);
 
@@ -87,105 +84,242 @@ public class ProfileTrackService {
 
         if (shouldUpdate(incomingUpdatedAt, existingUpdatedAt)) {
             log.info("Incoming data is newer, updating profile");
-            return updateProfile(existingProfile, command, incomingUpdatedAt);
+            return updateExistingProfile(existingProfile, command, incomingUpdatedAt);
         } else {
-            log.info("⏭️ Incoming data is older/same, skipping update");
+            log.info("Incoming data is older/same, skipping update");
             return ProcessResult.skipped(profileId, "Incoming updated_at <= existing updated_at");
         }
     }
 
-    /**
-     * Handle Merge Service
-     */
-    private ProcessResult handleMergeService(
+    private ProcessResult handleMergeByIdcard(
             CreateProfileCommand command,
             Instant incomingUpdatedAt
     ) {
+        String tenantId = command.getTenantId();
+        String appId = command.getAppId();
+        String userId = command.getUserId();
         String idcard = command.getTraits() != null ? command.getTraits().getIdcard() : null;
 
-        log.info("🔀 Merge Service: idcard={}", idcard);
+        log.info("Merge Service: tenant={}, idcard={}", tenantId, idcard);
 
+        // ═══════════════════════════════════════════════════════════════
+        // CASE 1: No idcard → Create new profile with UUID
+        // ═══════════════════════════════════════════════════════════════
         if (idcard == null || idcard.isBlank()) {
-            log.info("🆕 No idcard, creating new profile");
+            log.info("No idcard, creating new profile with UUID");
             return createNewProfile(command);
         }
 
-        // FIXED: Search by idcard within tenant
-        List<ProfileModel> existingProfiles = profileRepository.findByIdcard(
-                command.getTenantId(),
-                idcard
-        );
+        // ═══════════════════════════════════════════════════════════════
+        // CASE 2: Find master profile by idcard + tenant
+        // ═══════════════════════════════════════════════════════════════
+        String profileId = idcard; 
 
-        if (!existingProfiles.isEmpty()) {
-            ProfileModel existingProfile = existingProfiles.get(0);
-            String profileId = extractProfileId(existingProfile);
-            Instant existingUpdatedAt = existingProfile.getUpdatedAt();
+        Optional<ProfileModel> profileOpt = profileRepository.findById(profileId);
 
-            log.info("🔍 Found existing profile with idcard: profileId={}", profileId);
-
-            if (shouldUpdate(incomingUpdatedAt, existingUpdatedAt)) {
-                log.info("Updating existing profile and creating mapping");
-                ProcessResult result = updateProfile(existingProfile, command, incomingUpdatedAt);
-
-                // Create mapping
-                mappingRepository.saveMapping(
-                        command.getTenantId(),
-                        command.getAppId(),
-                        command.getUserId(),
-                        profileId
-                );
-
-                Profile profile = convertToDomain(existingProfile);
-                profile.addUser(command.getAppId(), command.getUserId());
-                profileRepository.save(profile);
-                result.setMappingCreated(true);
-
-                return result;
-            } else {
-                log.info("⏭️ Just creating mapping, profile not updated");
-                mappingRepository.saveMapping(
-                        command.getTenantId(),
-                        command.getAppId(),
-                        command.getUserId(),
-                        profileId
-                );
-
-                Profile profile = convertToDomain(existingProfile);
-                profile.addUser(command.getAppId(), command.getUserId());
-                profileRepository.save(profile);
-
-                return ProcessResult.mappingOnly(
-                        profileId,
-                        "Mapping created, profile not updated (older data)"
-                );
-            }
+        if (profileOpt.isEmpty()) {
+            log.info("No existing profile with idcard={}, creating new", idcard);
+            return createNewProfile(command);
         }
 
-        log.info("🆕 No profile with idcard, creating new");
-        return createNewProfile(command);
+        // ═══════════════════════════════════════════════════════════════
+        // CASE 3: Found existing profile → Merge into it
+        // ═══════════════════════════════════════════════════════════════
+        ProfileModel existingProfile = profileOpt.get();
+
+        log.info("🔍 Found existing master profile: profileId={}", profileId);
+
+        Instant existingUpdatedAt = existingProfile.getUpdatedAt();
+
+        // 🔥 FIX 1: Create mapping FIRST (before checking update)
+        mappingRepository.saveMapping(tenantId, appId, userId, profileId);
+
+        // 🔥 FIX 2: Convert to domain and add user to users[] array
+        Profile profile = convertToDomain(existingProfile);
+
+        // Check if we need to update profile data
+        if (shouldUpdate(incomingUpdatedAt, existingUpdatedAt)) {
+            log.info("Updating profile with newer data");
+
+            // 🔥 FIX 3: Merge traits properly (keep existing data)
+            mergeProfileData(profile, command);
+
+            // Set updated_at
+            if (incomingUpdatedAt != null) {
+                profile.setUpdatedAt(incomingUpdatedAt);
+            } else {
+                profile.setUpdatedAt(Instant.now());
+            }
+
+            profile.setVersion((profile.getVersion() == null ? 0 : profile.getVersion()) + 1);
+            profile.setLastSeenAt(Instant.now());
+
+            // Save
+            ProfileModel saved = profileRepository.save(profile);
+
+            // Invalidate cache for ALL users
+            invalidateCacheForProfile(profileId, tenantId, appId, userId);
+
+            // Cache for current user
+            cacheService.put(tenantId, appId, userId, saved);
+
+            log.info("✅ Profile merged and updated: profileId={}", profileId);
+
+            return ProcessResult.updated(profileId, ProfileDTOMapper.toDTO(saved));
+        } else {
+            log.info("Data is older/same, only adding user to users[]");
+
+            // Just save the profile with new user in users[] array
+            ProfileModel saved = profileRepository.save(profile);
+
+            // Cache for current user
+            cacheService.put(tenantId, appId, userId, saved);
+
+            log.info("✅ User added to profile: profileId={}", profileId);
+
+            return ProcessResult.mappingOnly(
+                    profileId,
+                    "Mapping created, user added to profile, data not updated (older)"
+            );
+        }
     }
 
     /**
-     * FIXED: Create new profile with correct profileId
+     * 🔥 NEW: Merge incoming data into existing profile
+     * This keeps existing data and only updates with non-null incoming data
+     */
+    private void mergeProfileData(Profile existingProfile, CreateProfileCommand command) {
+        // Merge traits
+        Profile.Traits incomingTraits = mapTraits(command.getTraits());
+        if (incomingTraits != null) {
+            Profile.Traits existingTraits = existingProfile.getTraits();
+            if (existingTraits == null) {
+                existingProfile.setTraits(incomingTraits);
+            } else {
+                // Merge each field individually - keep existing if incoming is null
+                if (incomingTraits.getFullName() != null) {
+                    existingTraits.setFullName(incomingTraits.getFullName());
+                }
+                if (incomingTraits.getFirstName() != null) {
+                    existingTraits.setFirstName(incomingTraits.getFirstName());
+                }
+                if (incomingTraits.getLastName() != null) {
+                    existingTraits.setLastName(incomingTraits.getLastName());
+                }
+                if (incomingTraits.getIdcard() != null) {
+                    existingTraits.setIdcard(incomingTraits.getIdcard());
+                }
+                if (incomingTraits.getOldIdcard() != null) {
+                    existingTraits.setOldIdcard(incomingTraits.getOldIdcard());
+                }
+                if (incomingTraits.getPhone() != null) {
+                    existingTraits.setPhone(incomingTraits.getPhone());
+                }
+                if (incomingTraits.getEmail() != null) {
+                    existingTraits.setEmail(incomingTraits.getEmail());
+                }
+                if (incomingTraits.getGender() != null) {
+                    existingTraits.setGender(incomingTraits.getGender());
+                }
+                if (incomingTraits.getDob() != null) {
+                    existingTraits.setDob(incomingTraits.getDob());
+                }
+                if (incomingTraits.getAddress() != null) {
+                    existingTraits.setAddress(incomingTraits.getAddress());
+                }
+                if (incomingTraits.getReligion() != null) {
+                    existingTraits.setReligion(incomingTraits.getReligion());
+                }
+            }
+        }
+
+        // Merge platforms
+        Profile.Platforms incomingPlatforms = mapPlatforms(command.getPlatforms());
+        if (incomingPlatforms != null) {
+            Profile.Platforms existingPlatforms = existingProfile.getPlatforms();
+            if (existingPlatforms == null) {
+                existingProfile.setPlatforms(incomingPlatforms);
+            } else {
+                if (incomingPlatforms.getOs() != null) {
+                    existingPlatforms.setOs(incomingPlatforms.getOs());
+                }
+                if (incomingPlatforms.getDevice() != null) {
+                    existingPlatforms.setDevice(incomingPlatforms.getDevice());
+                }
+                if (incomingPlatforms.getBrowser() != null) {
+                    existingPlatforms.setBrowser(incomingPlatforms.getBrowser());
+                }
+                if (incomingPlatforms.getAppVersion() != null) {
+                    existingPlatforms.setAppVersion(incomingPlatforms.getAppVersion());
+                }
+            }
+        }
+
+        // Merge campaign
+        Profile.Campaign incomingCampaign = mapCampaign(command.getCampaign());
+        if (incomingCampaign != null) {
+            Profile.Campaign existingCampaign = existingProfile.getCampaign();
+            if (existingCampaign == null) {
+                existingProfile.setCampaign(incomingCampaign);
+            } else {
+                if (incomingCampaign.getUtmSource() != null) {
+                    existingCampaign.setUtmSource(incomingCampaign.getUtmSource());
+                }
+                if (incomingCampaign.getUtmCampaign() != null) {
+                    existingCampaign.setUtmCampaign(incomingCampaign.getUtmCampaign());
+                }
+                if (incomingCampaign.getUtmMedium() != null) {
+                    existingCampaign.setUtmMedium(incomingCampaign.getUtmMedium());
+                }
+                if (incomingCampaign.getUtmContent() != null) {
+                    existingCampaign.setUtmContent(incomingCampaign.getUtmContent());
+                }
+                if (incomingCampaign.getUtmTerm() != null) {
+                    existingCampaign.setUtmTerm(incomingCampaign.getUtmTerm());
+                }
+                if (incomingCampaign.getUtmCustom() != null) {
+                    existingCampaign.setUtmCustom(incomingCampaign.getUtmCustom());
+                }
+            }
+        }
+
+        // Merge metadata
+        if (command.getMetadata() != null && !command.getMetadata().isEmpty()) {
+            Map<String, Object> existingMetadata = existingProfile.getMetadata();
+            if (existingMetadata == null) {
+                existingProfile.setMetadata(new HashMap<>(command.getMetadata()));
+            } else {
+                existingMetadata.putAll(command.getMetadata());
+            }
+        }
+
+        // Update type if provided
+        if (command.getType() != null) {
+            existingProfile.setType(command.getType());
+        }
+    }
+
+    /**
+     * 🔥 FIXED: Create new profile with proper initialization
      */
     private ProcessResult createNewProfile(CreateProfileCommand command) {
         String idcard = command.getTraits() != null ? command.getTraits().getIdcard() : null;
 
-        // Generate profileId FIRST
+        // Generate profileId = RAW idcard or UUID
         String profileId = generateProfileId(idcard);
 
-        log.info("🆕 Creating new profile: profileId={}", profileId);
+        log.info("Creating new master profile: profileId={}", profileId);
 
         Instant now = Instant.now();
 
-        // FIXED: Use profileId as the document ID (stored in userId field)
+        // Create profile with userId = profileId (ES document _id)
         Profile newProfile = Profile.builder()
                 .tenantId(command.getTenantId())
                 .appId(command.getAppId())
-                .userId(profileId)
+                .userId(profileId)  // Document _id = profileId
                 .type(command.getType())
                 .status(ProfileStatus.ACTIVE)
-                .users(new ArrayList<>())
+                .users(new ArrayList<>())  // Initialize users array
                 .traits(mapTraits(command.getTraits()))
                 .platforms(mapPlatforms(command.getPlatforms()))
                 .campaign(mapCampaign(command.getCampaign()))
@@ -197,11 +331,7 @@ public class ProfileTrackService {
                 .version(1)
                 .build();
 
-        newProfile.addUser(command.getAppId(), command.getUserId());
-        // Save to ES
-        ProfileModel saved = profileRepository.save(newProfile);
-
-        // Create mapping with correct profileId
+        // Create mapping: (tenant|app|user) → profileId
         mappingRepository.saveMapping(
                 command.getTenantId(),
                 command.getAppId(),
@@ -209,10 +339,10 @@ public class ProfileTrackService {
                 profileId
         );
 
-        log.info("🔗 Mapping created: {}|{}|{} -> {}",
-                command.getTenantId(), command.getAppId(), command.getUserId(), profileId);
+        // Save to ES
+        ProfileModel saved = profileRepository.save(newProfile);
 
-        // FIXED: Cache AFTER everything is saved
+        // Cache
         cacheService.put(
                 command.getTenantId(),
                 command.getAppId(),
@@ -220,15 +350,15 @@ public class ProfileTrackService {
                 saved
         );
 
-        log.info("Profile created successfully: profileId={}", profileId);
+        log.info("✅ Master profile created: profileId={}", profileId);
 
         return ProcessResult.created(profileId, ProfileDTOMapper.toDTO(saved));
     }
 
     /**
-     * FIXED: Update profile and cache AFTER
+     * 🔥 FIXED: Update existing profile without losing data
      */
-    private ProcessResult updateProfile(
+    private ProcessResult updateExistingProfile(
             ProfileModel existingModel,
             CreateProfileCommand command,
             Instant incomingUpdatedAt
@@ -237,35 +367,26 @@ public class ProfileTrackService {
 
         Profile profile = convertToDomain(existingModel);
 
-        // Step 1: Update data (this does NOT touch updatedAt)
-        profile.update(
-                mapTraits(command.getTraits()),
-                mapPlatforms(command.getPlatforms()),
-                mapCampaign(command.getCampaign())
-        );
+        // 🔥 FIX: Merge data instead of overwriting
+        mergeProfileData(profile, command);
 
-        // Step 2: Update metadata
-        if (command.getMetadata() != null && !command.getMetadata().isEmpty()) {
-            profile.updateMetadata(command.getMetadata());
-        }
-
-        // Step 3: Set updatedAt from incoming metadata (AFTER update())
+        // Set updatedAt
         if (incomingUpdatedAt != null) {
             profile.setUpdatedAt(incomingUpdatedAt);
-            log.debug("⏰ Set updated_at from metadata: {}", incomingUpdatedAt);
         } else {
             profile.setUpdatedAt(Instant.now());
-            log.debug("⏰ Set updated_at to now (no metadata timestamp)");
         }
 
-        // Step 4: Save to ES
+        profile.setVersion((profile.getVersion() == null ? 0 : profile.getVersion()) + 1);
+        profile.setLastSeenAt(Instant.now());
+
+        // Save to ES
         ProfileModel saved = profileRepository.save(profile);
 
-        // ADD THIS: Invalidate cache for ALL users linked to this profile
+        // Invalidate cache for ALL users
         invalidateCacheForProfile(profileId, command.getTenantId(), command.getAppId(), command.getUserId());
 
-
-        // Step 5: Cache AFTER save
+        // Cache for current user
         cacheService.put(
                 command.getTenantId(),
                 command.getAppId(),
@@ -308,34 +429,25 @@ public class ProfileTrackService {
         }
     }
 
-    /**
-     * FIXED: Proper profileId generation
-     */
     private String generateProfileId(String idcard) {
         if (idcard != null && !idcard.isBlank()) {
-            return "idcard:" + idcard;
+            return idcard; 
         }
-        return "uuid:" + UUID.randomUUID().toString();
+        return UUID.randomUUID().toString();
     }
 
-    /**
-     * FIXED: Extract profileId from ProfileModel
-     */
     private String extractProfileId(ProfileModel model) {
         // ProfileId is stored in userId field (ES document _id)
         String userId = model.getUserId();
 
-        if (userId != null && (userId.startsWith("idcard:") || userId.startsWith("uuid:"))) {
-            return userId;
-        }
-
-        // Fallback: try to build from idcard
+        // If has idcard in traits, use idcard
         if (model.getTraits() != null && model.getTraits().getIdcard() != null) {
-            return "idcard:" + model.getTraits().getIdcard();
+            String idcard = model.getTraits().getIdcard();
+            if (!idcard.isBlank()) {
+                return idcard;
+            }
         }
-
-        // Last resort: use legacy format
-        return model.getTenantId() + "|" + model.getAppId() + "|" + userId;
+        return userId;
     }
 
     private Instant extractUpdatedAt(Map<String, Object> metadata) {
@@ -374,6 +486,7 @@ public class ProfileTrackService {
                 .status(ProfileStatus.fromValue(model.getStatus()))
                 .mergedToMasterId(model.getMergedToMasterId())
                 .mergedAt(model.getMergedAt())
+                .users(convertUsers(model.getUsers()))
                 .traits(convertTraits(model.getTraits()))
                 .platforms(convertPlatforms(model.getPlatforms()))
                 .campaign(convertCampaign(model.getCampaign()))
@@ -384,6 +497,19 @@ public class ProfileTrackService {
                 .lastSeenAt(model.getLastSeenAt())
                 .version(model.getVersion())
                 .build();
+    }
+
+    private List<Profile.UserIdentity> convertUsers(List<? extends ProfileModel.UserIdentityModel> users) {
+        if (users == null) return new ArrayList<>();
+
+        List<Profile.UserIdentity> result = new ArrayList<>();
+        for (ProfileModel.UserIdentityModel u : users) {
+            result.add(Profile.UserIdentity.builder()
+                    .appId(u.getAppId())
+                    .userId(u.getUserId())
+                    .build());
+        }
+        return result;
     }
 
     private Profile.Traits mapTraits(CreateProfileCommand.TraitsCommand cmd) {

@@ -26,23 +26,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * PROFILE REST API CONTROLLER - UPDATED WITH MAPPING LAYER
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- *
- * NEW FLOW:
- * All operations go through profile_mapping first:
- * (tenant_id, app_id, user_id) → profile_id → profiles_thang_dev
- *
- * ENDPOINTS:
- * - GET    /v1/profiles/{tenantId}/{appId}/{userId}         → Get profile
- * - PUT    /v1/profiles/{tenantId}/{appId}/{userId}         → Update profile
- * - DELETE /v1/profiles/{tenantId}/{appId}/{userId}         → Delete profile
- * - POST   /v1/profiles/search                              → Search profiles
- * - GET    /v1/profiles/{tenantId}/{appId}/{userId}/linked  → Get linked accounts
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- */
 @Slf4j
 @RestController
 @RequestMapping("/v1/profiles")
@@ -149,13 +132,11 @@ public class ProfileMainController {
                     .profile(ProfileResponse.fromProfileDTO(updated))
                     .build();
 
-            log.info("Profile updated successfully");
+            log.info("✅ Profile updated successfully");
 
             return ResponseEntity.ok(response);
 
         } catch (ProfileNotFoundException ex) {
-            log.warn("❌ Profile not found: {}", ex.getMessage());
-
             UpdateProfileResponse response = UpdateProfileResponse.builder()
                     .code(404)
                     .message("Profile not found. No mapping exists for this user.")
@@ -237,7 +218,7 @@ public class ProfileMainController {
                     .remainingMappings(result.getRemainingMappings())
                     .build();
 
-            log.info("Delete complete: {}", message);
+            log.info("✅ Delete complete: {}", message);
 
             return ResponseEntity.ok(response);
 
@@ -312,7 +293,7 @@ public class ProfileMainController {
         Page<ProfileResponse> responsePage = profilePage.map(ProfileResponse::fromProfileDTO);
         ProfileListResponse response = ProfileListResponse.fromPage(responsePage);
 
-        log.info("Found {} profiles", profilePage.getTotalElements());
+        log.info("✅ Found {} profiles", profilePage.getTotalElements());
 
         return ResponseEntity.ok(response);
     }
@@ -384,15 +365,17 @@ public class ProfileMainController {
     // HELPER METHODS
     // ═══════════════════════════════════════════════════════════════
 
-    /**
-     * Extract profile_id from ProfileDTO
-     */
     private String extractProfileId(ProfileDTO profile) {
+        // Ưu tiên lấy từ idcard
         if (profile.getTraits() != null && profile.getTraits().getIdcard() != null) {
-            return "idcard:" + profile.getTraits().getIdcard();
+            String idcard = profile.getTraits().getIdcard();
+            if (!idcard.isBlank()) {
+                return idcard;  // ✅ RAW idcard
+            }
         }
-        // Fallback to old format
-        return profile.getTenantId() + "|" + profile.getAppId() + "|" + profile.getUserId();
+
+        // Fallback về userId (có thể là uuid:xxx)
+        return profile.getUserId();
     }
 
     // ═══════════════════════════════════════════════════════════════

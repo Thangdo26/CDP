@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.stereotype.Repository;
@@ -41,19 +42,19 @@ public class EsProfileMappingRepositoryImpl implements ProfileMappingRepository 
 
             ProfileMappingDocument doc = esOps.get(id, ProfileMappingDocument.class);
 
-            // FIXED: Check for null before accessing getProfileId()
+            // ✅ FIXED: Check for null before accessing getProfileId()
             if (doc == null) {
                 log.debug("❌ Mapping not found: {}", id);
                 return Optional.empty();
             }
 
-            // FIXED: Check if profileId is null
+            // ✅ FIXED: Check if profileId is null
             if (doc.getProfileId() == null) {
                 log.warn("⚠️ Mapping found but profileId is null: {}", id);
                 return Optional.empty();
             }
 
-            log.debug("Found mapping: {} → {}", id, doc.getProfileId());
+            log.debug("✅ Found mapping: {} → {}", id, doc.getProfileId());
             return Optional.of(doc.getProfileId());
 
         } catch (Exception e) {
@@ -99,7 +100,7 @@ public class EsProfileMappingRepositoryImpl implements ProfileMappingRepository 
 
             esOps.save(doc);
 
-            log.info("Mapping saved: {} → {}", id, profileId);
+            log.info("✅ Mapping saved: {} → {}", id, profileId);
 
         } catch (Exception e) {
             log.error("❌ Error saving mapping: {} → {}", id, profileId, e);
@@ -116,7 +117,7 @@ public class EsProfileMappingRepositoryImpl implements ProfileMappingRepository 
         try {
             ensureIndexExists();
             esOps.delete(id, ProfileMappingDocument.class);
-            log.info("Mapping deleted: {}", id);
+            log.info("✅ Mapping deleted: {}", id);
         } catch (Exception e) {
             log.error("❌ Error deleting mapping: {}", id, e);
             throw new RuntimeException("Failed to delete mapping", e);
@@ -127,25 +128,24 @@ public class EsProfileMappingRepositoryImpl implements ProfileMappingRepository 
     public List<String> findMappingsByProfileId(String profileId) {
         log.debug("🔍 Finding mappings for profile: {}", profileId);
 
-        try {
-            ensureIndexExists();
+        // ✅ Query ALL mappings with this profile_id
+        Criteria criteria = new Criteria("profile_id").is(profileId);
+        CriteriaQuery query = new CriteriaQuery(criteria);
 
-            Criteria criteria = new Criteria("profile_id").is(profileId);
-            CriteriaQuery query = new CriteriaQuery(criteria);
+        // ✅ Use search() to get ALL results
+        SearchHits<ProfileMappingDocument> hits = esOps.search(
+                query,
+                ProfileMappingDocument.class
+        );
 
-            List<String> mappingIds = esOps.search(query, ProfileMappingDocument.class)
-                    .stream()
-                    .map(SearchHit::getContent)
-                    .map(ProfileMappingDocument::getId)
-                    .collect(Collectors.toList());
+        List<String> mappingIds = hits.stream()
+                .map(SearchHit::getContent)
+                .map(ProfileMappingDocument::getId)
+                .collect(Collectors.toList());
 
-            log.debug("Found {} mappings for profile {}", mappingIds.size(), profileId);
+        log.debug("✅ Found {} mappings for profile {}", mappingIds.size(), profileId);
 
-            return mappingIds;
-        } catch (Exception e) {
-            log.error("❌ Error finding mappings for profile: {}", profileId, e);
-            return List.of();
-        }
+        return mappingIds;
     }
 
     @Override
@@ -180,10 +180,10 @@ public class EsProfileMappingRepositoryImpl implements ProfileMappingRepository 
                 IndexOperations indexOps = esOps.indexOps(ProfileMappingDocument.class);
 
                 if (!indexOps.exists()) {
-                    log.info("📋 Creating profile_mapping index...");
+                    log.info("Creating profile_mapping index...");
                     indexOps.create();
                     indexOps.putMapping();
-                    log.info("profile_mapping index created");
+                    log.info("✅ profile_mapping index created");
                 } else {
                     log.debug("✓ profile_mapping index already exists");
                 }

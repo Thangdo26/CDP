@@ -34,7 +34,7 @@ public interface ProfileModel {
     Instant getFirstSeenAt();
     Instant getLastSeenAt();
     Integer getVersion();
-    List<? extends UserIdentityModel> getUsers();
+    List< UserIdentityModel> getUsers();
 
     
     // NESTED INTERFACES

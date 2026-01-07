@@ -37,6 +37,12 @@ public class Profile implements ProfileModel {
     private String mergedToMasterId;
     private Instant mergedAt;
 
+    /**
+     * Users linked to this profile
+     *
+     * ⚠️ COMPUTED FIELD: This is rebuilt from profile_mapping on every save
+     * DO NOT modify directly - it will be rebuilt automatically when saving
+     */
     private List<UserIdentity> users;
 
     private Traits traits;
@@ -50,9 +56,38 @@ public class Profile implements ProfileModel {
     private Instant lastSeenAt;
     private Integer version;
 
+    // ═══════════════════════════════════════════════════════════════
+    // INTERFACE IMPLEMENTATION - getStatus()
+    // ═══════════════════════════════════════════════════════════════
+
     @Override
     public String getStatus() {
         return status != null ? status.name() : null;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ✅ FIX: Override getUsers() to match ProfileModel interface
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Override getUsers() to match ProfileModel interface
+     *
+     * Java generics are not covariant, so List<UserIdentity> is not
+     * a subtype of List<UserIdentityModel> even though UserIdentity
+     * implements UserIdentityModel.
+     *
+     * We need to explicitly cast to satisfy the interface.
+     *
+     * @return List of users (as UserIdentityModel interface type)
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<ProfileModel.UserIdentityModel> getUsers() {
+        if (users == null) {
+            return null;
+        }
+        // Safe cast: UserIdentity implements UserIdentityModel
+        return (List<ProfileModel.UserIdentityModel>) (List<?>) users;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -60,7 +95,7 @@ public class Profile implements ProfileModel {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Update profile data WITHOUT touching updatedAt
+     * ✅ Update profile data WITHOUT touching updatedAt
      * Caller is responsible for setting updatedAt explicitly
      */
     public void update(Traits newTraits, Platforms newPlatforms, Campaign newCampaign) {
@@ -74,7 +109,7 @@ public class Profile implements ProfileModel {
             this.campaign = mergeCampaign(this.campaign, newCampaign);
         }
 
-        // FIXED: Do NOT set updatedAt here
+        // ✅ FIXED: Do NOT set updatedAt here
         // Let ProfileTrackService control the timestamp based on metadata
 
         this.version = (this.version == null ? 0 : this.version) + 1;
@@ -84,7 +119,7 @@ public class Profile implements ProfileModel {
     }
 
     /**
-     * Explicitly set updatedAt (used by ProfileTrackService)
+     * ✅ Explicitly set updatedAt (used by ProfileTrackService)
      */
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
@@ -159,52 +194,6 @@ public class Profile implements ProfileModel {
                 .build();
     }
 
-    /**
-     * Add a user identity to this profile
-     */
-    public void addUser(String appId, String userId) {
-        if (this.users == null) {
-            this.users = new ArrayList<>();
-        }
-
-        // Check if already exists
-        boolean exists = this.users.stream()
-                .anyMatch(u -> u.getAppId().equals(appId) && u.getUserId().equals(userId));
-
-        if (!exists) {
-            this.users.add(UserIdentity.builder()
-                    .appId(appId)
-                    .userId(userId)
-                    .build());
-            log.debug("Added user to profile: {}|{}", appId, userId);
-        }
-    }
-
-    /**
-     * Remove a user identity from this profile
-     */
-    public void removeUser(String appId, String userId) {
-        if (this.users != null) {
-            boolean removed = this.users.removeIf(u ->
-                    u.getAppId().equals(appId) && u.getUserId().equals(userId));
-
-            if (removed) {
-                log.debug("🗑️ Removed user from profile: {}|{}", appId, userId);
-            }
-        }
-    }
-
-    /**
-     * Check if user is linked to this profile
-     */
-    public boolean hasUser(String appId, String userId) {
-        if (this.users == null) {
-            return false;
-        }
-        return this.users.stream()
-                .anyMatch(u -> u.getAppId().equals(appId) && u.getUserId().equals(userId));
-    }
-
     // ═══════════════════════════════════════════════════════════════
     // INNER CLASSES
     // ═══════════════════════════════════════════════════════════════
@@ -261,37 +250,4 @@ public class Profile implements ProfileModel {
         private String utmCustom;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // FACTORY METHODS
-    // ═══════════════════════════════════════════════════════════════
-
-    public static Profile create(
-            String tenantId,
-            String appId,
-            String userId,
-            String type,
-            Traits traits,
-            Platforms platforms,
-            Campaign campaign,
-            Map<String, Object> metadata
-    ) {
-        Instant now = Instant.now();
-
-        return Profile.builder()
-                .tenantId(tenantId)
-                .appId(appId)
-                .userId(userId)
-                .type(type)
-                .status(ProfileStatus.ACTIVE)
-                .traits(traits)
-                .platforms(platforms)
-                .campaign(campaign)
-                .metadata(metadata != null ? metadata : new HashMap<>())
-                .createdAt(now)
-                .updatedAt(now)
-                .firstSeenAt(now)
-                .lastSeenAt(now)
-                .version(1)
-                .build();
-    }
 }

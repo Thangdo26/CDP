@@ -53,7 +53,7 @@ public class ProfileTrackController {
             @Valid @RequestBody ProfileIngestionRequest request,
             @AuthenticationPrincipal ApiKeyAuthContext authContext
     ) {
-        log.info("Track request (async): tenant={}, app={}, user={}",
+        log.info("📥 Track request (async): tenant={}, app={}, user={}",
                 authContext.getTenantId(),
                 authContext.getAppId(),
                 request.getUserId());
@@ -67,36 +67,6 @@ public class ProfileTrackController {
                         .transactionId(requestId)
                         .build()
         );
-    }
-
-    /**
-     * Sync ingestion - Direct processing
-     * Use for testing or low-volume scenarios
-     * Returns detailed result of processing
-     */
-    @PostMapping("/profiles/track/sync")
-    public ResponseEntity<TrackResponse> ingestProfileSync(
-            @Valid @RequestBody ProfileIngestionRequest request,
-            @AuthenticationPrincipal ApiKeyAuthContext authContext
-    ) {
-        log.info("Track request (sync): tenant={}, app={}, user={}",
-                authContext.getTenantId(),
-                authContext.getAppId(),
-                request.getUserId());
-
-        ProfileTrackService.ProcessResult result =
-                ingestionService.ingestProfileSync(authContext, request);
-
-        TrackResponse response = TrackResponse.builder()
-                .code(200)
-                .message(result.getMessage())
-                .action(result.getAction().name())
-                .profileId(result.getProfileId())
-                .mappingCreated(result.isMappingCreated())
-                .processedAt(Instant.now())
-                .build();
-
-        return ResponseEntity.ok(response);
     }
 
     /**

@@ -29,7 +29,7 @@ public class ProfileIngestionConsumer {
         }
 
         try {
-            log.info("Processing RawProfile: tenant={}, app={}, user={}, idcard={}",
+            log.info("📥 Processing RawProfile: tenant={}, app={}, user={}, idcard={}",
                     rawProfile.getTenantId(),
                     rawProfile.getAppId(),
                     rawProfile.getUserId(),
@@ -39,7 +39,7 @@ public class ProfileIngestionConsumer {
             CreateProfileCommand command = commandMapper.toCommand(rawProfile);
             ProfileTrackService.ProcessResult result = trackService.processTrack(command);
 
-            log.info("Profile processed: action={}, profileId={}, mappingCreated={}",
+            log.info("✅ Profile processed: action={}, profileId={}, mappingCreated={}",
                     result.getAction(),
                     result.getProfileId(),
                     result.isMappingCreated());

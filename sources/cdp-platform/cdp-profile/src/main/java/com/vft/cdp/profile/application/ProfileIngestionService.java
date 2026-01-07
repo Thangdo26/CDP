@@ -36,7 +36,6 @@ public class ProfileIngestionService {
     private static final String PROFILE_RAW_TOPIC = "cdp.profiles.raw";
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final ProfileTrackService trackService;  // NEW
 
     /**
      * Async ingestion via Kafka (default mode)
@@ -57,7 +56,7 @@ public class ProfileIngestionService {
                         log.error("❌ Failed to send profile to Kafka: topic={}, key={}",
                                 PROFILE_RAW_TOPIC, kafkaKey, ex);
                     } else {
-                        log.info("Sent profile to Kafka: topic={}, partition={}, offset={}",
+                        log.info("✅ Sent profile to Kafka: topic={}, partition={}, offset={}",
                                 PROFILE_RAW_TOPIC,
                                 result.getRecordMetadata().partition(),
                                 result.getRecordMetadata().offset());
@@ -67,31 +66,6 @@ public class ProfileIngestionService {
         return UUID.randomUUID().toString();
     }
 
-    /**
-     * Sync ingestion - Process immediately with new flow
-     * Use this for testing or low-volume scenarios
-     */
-    public ProfileTrackService.ProcessResult ingestProfileSync(
-            ApiKeyAuthContext authContext,
-            ProfileIngestionRequest req
-    ) {
-        log.info("Sync ingestion: tenant={}, app={}, user={}",
-                authContext.getTenantId(),
-                authContext.getAppId(),
-                req.getUserId());
-
-        // Convert to command
-        CreateProfileCommand command = toCommand(authContext, req);
-
-        // Process with new flow
-        ProfileTrackService.ProcessResult result = trackService.processTrack(command);
-
-        log.info("Sync ingestion complete: action={}, profileId={}",
-                result.getAction(),
-                result.getProfileId());
-
-        return result;
-    }
 
     /**
      * Convert request to command

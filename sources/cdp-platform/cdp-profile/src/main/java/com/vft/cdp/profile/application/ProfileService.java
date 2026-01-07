@@ -62,7 +62,7 @@ public class ProfileService {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * FIXED: Get profile from ES via mapping, NOT from cache first
+     * ✅ FIXED: Get profile from ES via mapping, NOT from cache first
      */
     public Optional<ProfileDTO> getProfile(String tenantId, String appId, String userId) {
 
@@ -93,7 +93,7 @@ public class ProfileService {
         }
 
         String profileId = profileIdOpt.get();
-        log.debug("📋 Found mapping: {}|{}|{} → {}", tenantId, appId, userId, profileId);
+        log.debug("Found mapping: {}|{}|{} → {}", tenantId, appId, userId, profileId);
 
         // =========================
         // Step 2: Fetch from ES
@@ -113,7 +113,7 @@ public class ProfileService {
         // =========================
         cacheService.put(tenantId, appId, userId, profile);
 
-        log.info("Profile retrieved: profileId={}", profileId);
+        log.info("✅ Profile retrieved: profileId={}", profileId);
 
         return Optional.of(ProfileDTOMapper.toDTO(profile));
     }
@@ -132,7 +132,7 @@ public class ProfileService {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * FIXED: Update from ES, invalidate cache, cache new data
+     * ✅ FIXED: Update from ES, invalidate cache, cache new data
      */
     public ProfileDTO updateProfile(UpdateProfileCommand command) {
         String tenantId = command.getTenantId();
@@ -150,7 +150,7 @@ public class ProfileService {
         }
 
         String profileId = profileIdOpt.get();
-        log.debug("📋 Found mapping for update: {} → {}", userId, profileId);
+        log.debug("Found mapping for update: {} → {}", userId, profileId);
 
         // Step 2: Fetch from ES (NOT cache)
         Optional<ProfileModel> existingOpt = profileRepository.findById(profileId);
@@ -183,7 +183,7 @@ public class ProfileService {
         // Step 6: Cache the updated profile for current user
         cacheService.put(tenantId, appId, userId, saved);
 
-        log.info("Profile updated: profileId={}", profileId);
+        log.info("✅ Profile updated: profileId={}", profileId);
 
         return ProfileDTOMapper.toDTO(saved);
     }
@@ -193,7 +193,7 @@ public class ProfileService {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * FIXED: Delete from ES, remove mapping, clear cache
+     * ✅ FIXED: Delete from ES, remove mapping, clear cache
      */
     public DeleteResult deleteProfile(
             String tenantId,
@@ -213,7 +213,7 @@ public class ProfileService {
         }
 
         String profileId = profileIdOpt.get();
-        log.debug("📋 Found mapping for delete: {} → {}", userId, profileId);
+        log.debug("Found mapping for delete: {} → {}", userId, profileId);
 
         // Step 2: Count mappings
         long mappingCount = mappingRepository.countMappingsByProfileId(profileId);
@@ -235,11 +235,10 @@ public class ProfileService {
         } else if (mappingCount > 1) {
             log.info("⚠️ Profile has {} other mappings, keeping profile", mappingCount - 1);
 
-            // NEW: Remove user from profile.users array
+            // ✅ NEW: Remove user from profile.users array
             Optional<ProfileModel> profileOpt = profileRepository.findById(profileId);
             if (profileOpt.isPresent()) {
                 Profile profile = convertToDomain(profileOpt.get());
-                profile.removeUser(appId, userId);
                 profileRepository.save(profile);
                 log.debug("🗑️ Removed user from profile.users: {}|{}", appId, userId);
             }
@@ -251,7 +250,7 @@ public class ProfileService {
         // Step 5: Clear cache
         cacheService.evict(tenantId, appId, userId);
 
-        log.info("Delete complete: mapping removed={}, profile deleted={}",
+        log.info("✅ Delete complete: mapping removed={}, profile deleted={}",
                 true, profileDeleted);
 
         return DeleteResult.builder()
@@ -299,7 +298,7 @@ public class ProfileService {
         String idcard = command.getTraits() != null ? command.getTraits().getIdcard() : null;
         String profileId = idcard != null && !idcard.isBlank()
                 ? "idcard:" + idcard
-                : "uuid:" + UUID.randomUUID().toString();
+                :  UUID.randomUUID().toString();
 
         // Create profile
         Profile profile = Profile.builder()
@@ -334,7 +333,7 @@ public class ProfileService {
         // Cache
         cacheService.put(tenantId, appId, userId, saved);
 
-        log.info("Profile created: profileId={}", profileId);
+        log.info("✅ Profile created: profileId={}", profileId);
 
         return ProfileDTOMapper.toDTO(saved);
     }
@@ -430,7 +429,7 @@ public class ProfileService {
                 })
                 .collect(Collectors.toList());
 
-        log.info("Found {} profiles (total: {})", profiles.size(), searchHits.getTotalHits());
+        log.info("✅ Found {} profiles (total: {})", profiles.size(), searchHits.getTotalHits());
 
         return new PageImpl<>(profiles, pageRequest, searchHits.getTotalHits());
     }
@@ -464,7 +463,7 @@ public class ProfileService {
             }
         }
 
-        log.info("Found {} linked accounts for profile {}", linkedAccounts.size(), profileId);
+        log.info("✅ Found {} linked accounts for profile {}", linkedAccounts.size(), profileId);
 
         return linkedAccounts;
     }

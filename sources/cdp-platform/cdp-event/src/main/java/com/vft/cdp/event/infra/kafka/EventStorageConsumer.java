@@ -64,7 +64,7 @@ public class EventStorageConsumer {
             @Header(KafkaHeaders.OFFSET) long offset) {
 
 //        log.info("═".repeat(60));
-        log.info("EVENT STORAGE CONSUMER STARTED");
+        log.info("📥 EVENT STORAGE CONSUMER STARTED");
 //        log.info("Event: tenant={}, profile={}, event={}",
 //                event.getTenantId(),
 //                event.getProfileId(),

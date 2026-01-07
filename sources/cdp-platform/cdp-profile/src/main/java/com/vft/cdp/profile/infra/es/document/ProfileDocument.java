@@ -240,18 +240,4 @@ public class ProfileDocument {
                 .anyMatch(u -> u.getAppId().equals(appId) && u.getUserId().equals(userId));
     }
 
-    /**
-     * Generate profile ID based on idcard or UUID
-     *
-     * @param idcard CCCD number (can be null)
-     * @return profile ID
-     */
-    public static String generateProfileId(String idcard) {
-        if (idcard != null && !idcard.isBlank()) {
-            // Use idcard as unique identifier
-            return "idcard:" + idcard;
-        }
-        // Generate UUID for profiles without idcard
-        return "uuid:" + UUID.randomUUID().toString();
-    }
 }

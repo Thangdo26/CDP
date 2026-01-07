@@ -101,4 +101,13 @@ public interface ProfileRepository {
      * Count total unique profiles (globally)
      */
     long countTotal();
+
+    /**
+     * Rebuild users[] array from profile_mapping
+     * This is called before saving profile to ensure users[] is up-to-date
+     *
+     * @param profileId Profile ID to rebuild users for
+     * @return List of user identities from mappings
+     */
+    List<ProfileModel.UserIdentityModel> rebuildUsersFromMappings(String profileId);
 }
