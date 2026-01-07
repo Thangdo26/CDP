@@ -50,7 +50,7 @@ public interface ProfileModel {
         String getLastName();
         String getIdcard();
         String getOldIdcard();
-        String getPhone();
+        List<String> getPhone();
         String getEmail();
         String getGender();
         String getDob();

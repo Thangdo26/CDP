@@ -1,5 +1,7 @@
 package com.vft.cdp.profile.infra.es.document;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -42,6 +44,7 @@ public class ProfileDocument {
      * Strategy: Use idcard if available, otherwise generate UUID
      */
     @Id
+    @JsonProperty("profile_id")
     private String id;
 
     // ══════════════════════════════════════════════════════════
@@ -135,7 +138,8 @@ public class ProfileDocument {
         private String oldIdcard;
 
         @Field(type = FieldType.Keyword, name = "phone")
-        private String phone;
+        @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+        private List<String> phone;
 
         @Field(type = FieldType.Keyword, name = "email")
         private String email;

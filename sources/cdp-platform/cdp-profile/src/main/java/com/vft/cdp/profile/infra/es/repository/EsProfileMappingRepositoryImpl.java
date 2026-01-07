@@ -42,7 +42,6 @@ public class EsProfileMappingRepositoryImpl implements ProfileMappingRepository 
 
             ProfileMappingDocument doc = esOps.get(id, ProfileMappingDocument.class);
 
-            // ✅ FIXED: Check for null before accessing getProfileId()
             if (doc == null) {
                 log.debug("❌ Mapping not found: {}", id);
                 return Optional.empty();
@@ -100,6 +99,15 @@ public class EsProfileMappingRepositoryImpl implements ProfileMappingRepository 
 
             esOps.save(doc);
 
+            // ✅ FIXED: Refresh index to make mapping immediately searchable
+            // This prevents race condition where profile is saved but mapping not yet indexed
+            try {
+                esOps.indexOps(ProfileMappingDocument.class).refresh();
+                log.debug("🔄 Refreshed mapping index");
+            } catch (Exception e) {
+                log.warn("⚠️ Failed to refresh mapping index (non-critical): {}", e.getMessage());
+            }
+
             log.info("✅ Mapping saved: {} → {}", id, profileId);
 
         } catch (Exception e) {
@@ -128,11 +136,9 @@ public class EsProfileMappingRepositoryImpl implements ProfileMappingRepository 
     public List<String> findMappingsByProfileId(String profileId) {
         log.debug("🔍 Finding mappings for profile: {}", profileId);
 
-        // ✅ Query ALL mappings with this profile_id
         Criteria criteria = new Criteria("profile_id").is(profileId);
         CriteriaQuery query = new CriteriaQuery(criteria);
 
-        // ✅ Use search() to get ALL results
         SearchHits<ProfileMappingDocument> hits = esOps.search(
                 query,
                 ProfileMappingDocument.class

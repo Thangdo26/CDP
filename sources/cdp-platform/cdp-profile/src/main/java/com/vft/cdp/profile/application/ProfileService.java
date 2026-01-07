@@ -16,6 +16,7 @@ import com.vft.cdp.profile.infra.cache.ProfileCacheService;
 import com.vft.cdp.profile.infra.es.document.ProfileDocument;
 import com.vft.cdp.profile.infra.es.mapper.ProfileMapper;
 
+import com.vft.cdp.profile.utils.AutoIdUtil;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -65,8 +66,6 @@ public class ProfileService {
      * ✅ FIXED: Get profile from ES via mapping, NOT from cache first
      */
     public Optional<ProfileDTO> getProfile(String tenantId, String appId, String userId) {
-
-        log.info("📖 GET profile: tenant={}, app={}, user={}", tenantId, appId, userId);
 
         // =========================
         // Step 0: Cache FIRST
@@ -296,9 +295,7 @@ public class ProfileService {
 
         // Generate profileId
         String idcard = command.getTraits() != null ? command.getTraits().getIdcard() : null;
-        String profileId = idcard != null && !idcard.isBlank()
-                ? "idcard:" + idcard
-                :  UUID.randomUUID().toString();
+        String profileId = AutoIdUtil.genProfileId();
 
         // Create profile
         Profile profile = Profile.builder()
@@ -575,13 +572,21 @@ public class ProfileService {
 
     private Profile.Traits mapCommandTraitsToDomain(CreateProfileCommand.TraitsCommand cmd) {
         if (cmd == null) return null;
+        List<String> phones = null;
+        if (cmd.getPhone() != null) {
+            String p = cmd.getPhone().trim();
+            if (!p.isEmpty()) {
+                phones = new ArrayList<>();
+                phones.add(p);
+            }
+        }
         return Profile.Traits.builder()
                 .fullName(cmd.getFullName())
                 .firstName(cmd.getFirstName())
                 .lastName(cmd.getLastName())
                 .idcard(cmd.getIdcard())
                 .oldIdcard(cmd.getOldIdcard())
-                .phone(cmd.getPhone())
+                .phone(phones)
                 .email(cmd.getEmail())
                 .gender(cmd.getGender())
                 .dob(cmd.getDob())

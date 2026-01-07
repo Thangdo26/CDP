@@ -9,6 +9,8 @@ import com.vft.cdp.profile.domain.Profile;
 import com.vft.cdp.profile.domain.ProfileStatus;
 import com.vft.cdp.profile.infra.cache.ProfileCacheService;
 import com.vft.cdp.profile.application.mapper.ProfileDTOMapper;
+import com.vft.cdp.profile.utils.AutoIdUtil;
+import com.vft.cdp.profile.utils.PhoneUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,13 +20,12 @@ import java.util.*;
 
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * PROFILE TRACK SERVICE - FIXED MERGE LOGIC
+ * PROFILE TRACK SERVICE - UPDATED WITH MATCHING LOGIC
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * FIXES:
- * 1. Merge traits properly (keep existing data)
- * 2. Preserve users[] array when updating
- * 3. Add new user to existing users[] array
+ * CHANGES:
+ * 1. createNewProfile: Don't initialize users[] - let repository handle it
+ * 2. handleMergeByMatching: Use existing profile_id for mapping when match found
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Slf4j
@@ -35,36 +36,29 @@ public class ProfileTrackService {
     private final ProfileMappingRepository mappingRepository;
     private final ProfileRepository profileRepository;
     private final ProfileCacheService cacheService;
+    private final ProfileMatchingService matchingService;
 
-    /**
-     * Process incoming profile track request
-     */
     public ProcessResult processTrack(CreateProfileCommand command) {
         String tenantId = command.getTenantId();
         String appId = command.getAppId();
         String userId = command.getUserId();
-        String idcard = command.getTraits() != null ? command.getTraits().getIdcard() : null;
 
-        log.info("🔥 Processing track: tenant={}, app={}, user={}, idcard={}",
-                tenantId, appId, userId, idcard);
+        log.info("🔥 Processing track: tenant={}, app={}, user={}",
+                tenantId, appId, userId);
 
         Instant incomingUpdatedAt = extractUpdatedAt(command.getMetadata());
 
-        // ═══════════════════════════════════════════════════════════════
-        // STEP 1: Check profile_mapping
-        // ═══════════════════════════════════════════════════════════════
+        // Step 1: Check profile_mapping
         Optional<String> existingProfileId = mappingRepository.findProfileId(tenantId, appId, userId);
 
         if (existingProfileId.isPresent()) {
             return handleExistingMapping(existingProfileId.get(), command, incomingUpdatedAt);
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // STEP 2: Merge Service - Find by idcard + tenant
-        // ═══════════════════════════════════════════════════════════════
-        return handleMergeByIdcard(command, incomingUpdatedAt);
+        // Step 2: Merge Service - Find by multiple criteria
+        return handleMergeByMatching(command, incomingUpdatedAt);
     }
-    
+
     private ProcessResult handleExistingMapping(
             String profileId,
             CreateProfileCommand command,
@@ -91,60 +85,61 @@ public class ProfileTrackService {
         }
     }
 
-    private ProcessResult handleMergeByIdcard(
+    private ProcessResult handleMergeByMatching(
             CreateProfileCommand command,
             Instant incomingUpdatedAt
     ) {
         String tenantId = command.getTenantId();
         String appId = command.getAppId();
         String userId = command.getUserId();
+
+        // Extract traits
         String idcard = command.getTraits() != null ? command.getTraits().getIdcard() : null;
+        String phone = command.getTraits() != null ? command.getTraits().getPhone() : null;
+        String email = command.getTraits() != null ? command.getTraits().getEmail() : null;
+        String dob = command.getTraits() != null ? command.getTraits().getDob() : null;
 
-        log.info("Merge Service: tenant={}, idcard={}", tenantId, idcard);
+        log.info("🔍 Merge Service: tenant={}, idcard={}, phone={}, email={}, dob={}",
+                tenantId, idcard, phone, email, dob);
 
         // ═══════════════════════════════════════════════════════════════
-        // CASE 1: No idcard → Create new profile with UUID
+        // Find matching profile using multiple strategies
         // ═══════════════════════════════════════════════════════════════
-        if (idcard == null || idcard.isBlank()) {
-            log.info("No idcard, creating new profile with UUID");
+        ProfileMatchingService.MatchResult matchResult = matchingService.findMatchingProfile(
+                tenantId, idcard, email, dob
+        );
+
+        if (!matchResult.isFound()) {
+            log.info("🆕 No matching profile, creating new");
             return createNewProfile(command);
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // CASE 2: Find master profile by idcard + tenant
+        // ✅ FIXED: Found matching profile → Use existing profile_id for mapping
         // ═══════════════════════════════════════════════════════════════
-        String profileId = idcard; 
+        ProfileModel existingProfile = matchResult.getProfile();
+        String existingProfileId = extractProfileId(existingProfile);
 
-        Optional<ProfileModel> profileOpt = profileRepository.findById(profileId);
+        log.info("🔍 Found existing profile: id={}, strategy={}",
+                existingProfileId, matchResult.getStrategy().getValue());
 
-        if (profileOpt.isEmpty()) {
-            log.info("No existing profile with idcard={}, creating new", idcard);
-            return createNewProfile(command);
-        }
+        // ✅ Create mapping using EXISTING profile_id
+        mappingRepository.saveMapping(tenantId, appId, userId, existingProfileId);
+        log.info("🔗 Mapping created: {}|{}|{} → {}", tenantId, appId, userId, existingProfileId);
 
-        // ═══════════════════════════════════════════════════════════════
-        // CASE 3: Found existing profile → Merge into it
-        // ═══════════════════════════════════════════════════════════════
-        ProfileModel existingProfile = profileOpt.get();
-
-        log.info("🔍 Found existing master profile: profileId={}", profileId);
+        // ✅ Convert to domain
+        Profile profile = convertToDomain(existingProfile);
 
         Instant existingUpdatedAt = existingProfile.getUpdatedAt();
 
-        // 🔥 FIX 1: Create mapping FIRST (before checking update)
-        mappingRepository.saveMapping(tenantId, appId, userId, profileId);
-
-        // 🔥 FIX 2: Convert to domain and add user to users[] array
-        Profile profile = convertToDomain(existingProfile);
-
         // Check if we need to update profile data
         if (shouldUpdate(incomingUpdatedAt, existingUpdatedAt)) {
-            log.info("Updating profile with newer data");
+            log.info("✏️ Updating profile with newer data");
 
-            // 🔥 FIX 3: Merge traits properly (keep existing data)
+            // Merge data
             mergeProfileData(profile, command);
 
-            // Set updated_at
+            // Set timestamps
             if (incomingUpdatedAt != null) {
                 profile.setUpdatedAt(incomingUpdatedAt);
             } else {
@@ -157,29 +152,25 @@ public class ProfileTrackService {
             // Save
             ProfileModel saved = profileRepository.save(profile);
 
-            // Invalidate cache for ALL users
-            invalidateCacheForProfile(profileId, tenantId, appId, userId);
-
-            // Cache for current user
+            // Invalidate cache
+            invalidateCacheForProfile(existingProfileId, tenantId, appId, userId);
             cacheService.put(tenantId, appId, userId, saved);
 
-            log.info("✅ Profile merged and updated: profileId={}", profileId);
+            log.info("✅ Profile merged and updated: profileId={}, strategy={}",
+                    existingProfileId, matchResult.getStrategy().getValue());
 
-            return ProcessResult.updated(profileId, ProfileDTOMapper.toDTO(saved));
+            return ProcessResult.updated(existingProfileId, ProfileDTOMapper.toDTO(saved));
         } else {
-            log.info("Data is older/same, only adding user to users[]");
+            log.info("⏭️ Data is older/same, only mapping created");
 
-            // Just save the profile with new user in users[] array
+            // Just save to trigger users[] rebuild
             ProfileModel saved = profileRepository.save(profile);
 
-            // Cache for current user
             cacheService.put(tenantId, appId, userId, saved);
 
-            log.info("✅ User added to profile: profileId={}", profileId);
-
             return ProcessResult.mappingOnly(
-                    profileId,
-                    "Mapping created, user added to profile, data not updated (older)"
+                    existingProfileId,
+                    "Mapping created via " + matchResult.getStrategy().getValue() + " match"
             );
         }
     }
@@ -212,8 +203,10 @@ public class ProfileTrackService {
                 if (incomingTraits.getOldIdcard() != null) {
                     existingTraits.setOldIdcard(incomingTraits.getOldIdcard());
                 }
-                if (incomingTraits.getPhone() != null) {
-                    existingTraits.setPhone(incomingTraits.getPhone());
+                if (incomingTraits.getPhone() != null && !incomingTraits.getPhone().isEmpty()) {
+                    if (existingTraits.getPhone() == null) existingTraits.setPhone(new ArrayList<>());
+                    List<String> merged = PhoneUtil.union(existingTraits.getPhone(), incomingTraits.getPhone());
+                    existingTraits.setPhone(merged);
                 }
                 if (incomingTraits.getEmail() != null) {
                     existingTraits.setEmail(incomingTraits.getEmail());
@@ -300,26 +293,31 @@ public class ProfileTrackService {
     }
 
     /**
-     * 🔥 FIXED: Create new profile with proper initialization
+     * ✅ FIXED: Initialize users[] with current user to avoid race condition
+     * Previously: Let repository rebuild from mapping (but mapping not refreshed yet)
+     * Now: Manually add current user, repository will sync with mappings on next update
      */
     private ProcessResult createNewProfile(CreateProfileCommand command) {
-        String idcard = command.getTraits() != null ? command.getTraits().getIdcard() : null;
-
-        // Generate profileId = RAW idcard or UUID
-        String profileId = generateProfileId(idcard);
-
-        log.info("Creating new master profile: profileId={}", profileId);
+        // ✅ Generate UUID for profile ID
+        String profileId = AutoIdUtil.genProfileId();
 
         Instant now = Instant.now();
 
-        // Create profile with userId = profileId (ES document _id)
+        // ✅ FIXED: Initialize users[] with the current user
+        List<Profile.UserIdentity> initialUsers = new ArrayList<>();
+        initialUsers.add(Profile.UserIdentity.builder()
+                .appId(command.getAppId())
+                .userId(command.getUserId())
+                .build());
+
         Profile newProfile = Profile.builder()
                 .tenantId(command.getTenantId())
                 .appId(command.getAppId())
-                .userId(profileId)  // Document _id = profileId
+                .userId(profileId)
                 .type(command.getType())
                 .status(ProfileStatus.ACTIVE)
-                .users(new ArrayList<>())  // Initialize users array
+                // ✅ FIXED: Initialize with current user to avoid race condition
+                .users(initialUsers)
                 .traits(mapTraits(command.getTraits()))
                 .platforms(mapPlatforms(command.getPlatforms()))
                 .campaign(mapCampaign(command.getCampaign()))
@@ -331,7 +329,7 @@ public class ProfileTrackService {
                 .version(1)
                 .build();
 
-        // Create mapping: (tenant|app|user) → profileId
+        // Create mapping
         mappingRepository.saveMapping(
                 command.getTenantId(),
                 command.getAppId(),
@@ -339,7 +337,7 @@ public class ProfileTrackService {
                 profileId
         );
 
-        // Save to ES
+        // Save profile (users[] already populated, repository will sync with mappings)
         ProfileModel saved = profileRepository.save(newProfile);
 
         // Cache
@@ -350,14 +348,12 @@ public class ProfileTrackService {
                 saved
         );
 
-        log.info("✅ Master profile created: profileId={}", profileId);
+        log.info("✅ Master profile created: profileId={}, users[]={}",
+                profileId, saved.getUsers() != null ? saved.getUsers().size() : 0);
 
         return ProcessResult.created(profileId, ProfileDTOMapper.toDTO(saved));
     }
 
-    /**
-     * 🔥 FIXED: Update existing profile without losing data
-     */
     private ProcessResult updateExistingProfile(
             ProfileModel existingModel,
             CreateProfileCommand command,
@@ -430,24 +426,11 @@ public class ProfileTrackService {
     }
 
     private String generateProfileId(String idcard) {
-        if (idcard != null && !idcard.isBlank()) {
-            return idcard; 
-        }
-        return UUID.randomUUID().toString();
+        return AutoIdUtil.genProfileId();
     }
 
     private String extractProfileId(ProfileModel model) {
-        // ProfileId is stored in userId field (ES document _id)
-        String userId = model.getUserId();
-
-        // If has idcard in traits, use idcard
-        if (model.getTraits() != null && model.getTraits().getIdcard() != null) {
-            String idcard = model.getTraits().getIdcard();
-            if (!idcard.isBlank()) {
-                return idcard;
-            }
-        }
-        return userId;
+        return model.getUserId();
     }
 
     private Instant extractUpdatedAt(Map<String, Object> metadata) {
@@ -514,14 +497,18 @@ public class ProfileTrackService {
 
     private Profile.Traits mapTraits(CreateProfileCommand.TraitsCommand cmd) {
         if (cmd == null) return null;
+        List<String> phones = new ArrayList<>();
+        String p = PhoneUtil.normalize(cmd.getPhone());
+        if (p != null) phones.add(p);
+
         return Profile.Traits.builder()
                 .fullName(cmd.getFullName())
                 .firstName(cmd.getFirstName())
                 .lastName(cmd.getLastName())
                 .idcard(cmd.getIdcard())
                 .oldIdcard(cmd.getOldIdcard())
-                .phone(cmd.getPhone())
-                .email(cmd.getEmail())
+                .phone(phones)
+                .email(cmd.getEmail() != null ? cmd.getEmail().trim().toLowerCase() : null)
                 .gender(cmd.getGender())
                 .dob(cmd.getDob())
                 .address(cmd.getAddress())

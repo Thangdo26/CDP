@@ -5,6 +5,7 @@ import com.vft.cdp.common.profile.RawProfile;
 import com.vft.cdp.profile.api.request.ProfileIngestionRequest;
 import com.vft.cdp.profile.application.command.CreateProfileCommand;
 import com.vft.cdp.profile.application.mapper.ProfileIngestionMapper;
+import com.vft.cdp.profile.utils.AutoIdUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -63,7 +64,7 @@ public class ProfileIngestionService {
                     }
                 });
 
-        return UUID.randomUUID().toString();
+        return AutoIdUtil.genProfileId();
     }
 
 

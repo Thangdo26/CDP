@@ -93,20 +93,8 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
                 .collect(Collectors.toList());
     }
 
-    // Helper to extract profile ID
     private String extractProfileId(ProfileModel model) {
-        // Profile ID is in userId field (ES document _id)
-        String userId = model.getUserId();
-
-        // If has idcard, prefer it
-        if (model.getTraits() != null && model.getTraits().getIdcard() != null) {
-            String idcard = model.getTraits().getIdcard();
-            if (!idcard.isBlank()) {
-                return idcard;
-            }
-        }
-
-        return userId;
+        return model.getUserId();
     }
 
     /**
@@ -134,7 +122,7 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
     private Optional<ProfileModel> findFirstByIdcard(String idcard) {
 
         Criteria criteria = new Criteria("traits.idcard").is(idcard)
-                .and("status").is("ACTIVE"); // 🔥 FIX CASE-SENSITIVE
+                .and("status").is("ACTIVE");
 
         CriteriaQuery query = new CriteriaQuery(criteria);
 
@@ -206,12 +194,10 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
 
     @Override
     public Page<ProfileModel> findActiveProfiles(String tenantId, Pageable pageable) {
-        return findByStatus(tenantId, "active", pageable);
+        return findByStatus(tenantId, "ACTIVE", pageable);
     }
-
-    @Override
     public Page<ProfileModel> findMergedProfiles(String tenantId, Pageable pageable) {
-        return findByStatus(tenantId, "merged", pageable);
+        return findByStatus(tenantId, "MERGED", pageable);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -306,11 +292,10 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
 
     @Override
     public List<ProfileModel> findByIdcard(String tenantId, String idcard) {
-        log.debug("🔍 Finding profiles by idcard: tenant={}, idcard={}", tenantId, idcard);
 
         Criteria criteria = new Criteria("tenant_id").is(tenantId)
                 .and("traits.idcard").is(idcard)
-                .and("status").is("active");
+                .and(activeStatusCriteria());
 
         CriteriaQuery query = new CriteriaQuery(criteria);
 
@@ -322,6 +307,9 @@ public class EsProfileRepositoryImpl implements ProfileRepository {
         log.debug("✅ Found {} profiles with idcard={}", models.size(), idcard);
 
         return models;
+    }
+    private Criteria activeStatusCriteria() {
+        return new Criteria("status").in("ACTIVE", "active");
     }
 
     /**

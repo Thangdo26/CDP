@@ -43,45 +43,15 @@ public final class ProfileMapper {
         return tenantId + "|" + appId + "|" + userId;
     }
 
-    /**
-     * Build profile ID based on idcard
-     *
-     * @param idcard CCCD number (can be null)
-     * @return "idcard:xxx" if idcard exists, null otherwise
-     */
-    public static String buildIdcardBasedId(String idcard) {
-        if (idcard != null && !idcard.isBlank()) {
-            return idcard;
-        }
-        return null;
-    }
-
-    /**
-     * Build profile ID - prefer idcard-based, fallback to UUID
-     */
     public static String buildProfileId(Profile profile) {
-        // Try idcard first
-        if (profile.getTraits() != null && profile.getTraits().getIdcard() != null) {
-            String idcard = profile.getTraits().getIdcard();
-            if (!idcard.isBlank()) {
-                return idcard;
-            }
-        }
-        return UUID.randomUUID().toString();
+        return profile.getUserId();
     }
 
     /**
      * Build profile ID from ProfileModel
      */
     public static String buildProfileId(ProfileModel model) {
-        // Try idcard first
-        if (model.getTraits() != null && model.getTraits().getIdcard() != null) {
-            String idcard = model.getTraits().getIdcard();
-            if (!idcard.isBlank()) {
-                return idcard;
-            }
-        }
-        return UUID.randomUUID().toString();
+        return model.getUserId();
     }
 
     public static boolean isUuidBasedId(String id) {
@@ -197,22 +167,20 @@ public final class ProfileMapper {
     /**
      * Convert ProfileDocument to Domain Profile
      *
-     * NOTE: tenantId, appId, userId will be NULL
-     * Must be set separately using toDomain(doc, tenant, app, user) method
+     * ✅ FIXED: Now sets userId from document ID
+     * NOTE: appId will be NULL, must be set separately if needed
      */
     public static Profile toDomain(ProfileDocument doc) {
         if (doc == null) return null;
 
         return Profile.builder()
-                // Identity fields are NULL - must be set from ProfileMapping
-                .tenantId(null)
-                .appId(null)
-                .userId(null)
+                // ✅ FIXED: Use document ID as userId (this is the profile_id)
+                .tenantId(doc.getTenantId())
+                .userId(doc.getId())  // ← FIX: Set userId from document ID
                 .type(doc.getType())
                 .status(ProfileStatus.fromValue(doc.getStatus()))
+                .users(mapUsersToDomain(doc.getUsers()))
                 // mergedToMasterId and mergedAt are not in new ProfileDocument
-                .mergedToMasterId(null)
-                .mergedAt(null)
                 .traits(mapTraitsToDomain(doc.getTraits()))
                 .platforms(mapPlatformsToDomain(doc.getPlatforms()))
                 .campaign(mapCampaignToDomain(doc.getCampaign()))
@@ -240,8 +208,6 @@ public final class ProfileMapper {
                 .type(doc.getType())
                 .status(ProfileStatus.fromValue(doc.getStatus()))
                 .users(mapUsersToDomain(doc.getUsers()))
-                .mergedToMasterId(null)
-                .mergedAt(null)
                 .traits(mapTraitsToDomain(doc.getTraits()))
                 .platforms(mapPlatformsToDomain(doc.getPlatforms()))
                 .campaign(mapCampaignToDomain(doc.getCampaign()))

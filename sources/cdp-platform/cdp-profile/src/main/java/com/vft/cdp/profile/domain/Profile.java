@@ -1,6 +1,7 @@
 package com.vft.cdp.profile.domain;
 
 import com.vft.cdp.profile.application.model.ProfileModel;
+import com.vft.cdp.profile.utils.PhoneUtil;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -159,7 +160,7 @@ public class Profile implements ProfileModel {
                 .lastName(incoming.getLastName() != null ? incoming.getLastName() : existing.getLastName())
                 .idcard(incoming.getIdcard() != null ? incoming.getIdcard() : existing.getIdcard())
                 .oldIdcard(incoming.getOldIdcard() != null ? incoming.getOldIdcard() : existing.getOldIdcard())
-                .phone(incoming.getPhone() != null ? incoming.getPhone() : existing.getPhone())
+                .phone(PhoneUtil.union(existing.getPhone(), incoming.getPhone()))
                 .email(incoming.getEmail() != null ? incoming.getEmail() : existing.getEmail())
                 .gender(incoming.getGender() != null ? incoming.getGender() : existing.getGender())
                 .dob(incoming.getDob() != null ? incoming.getDob() : existing.getDob())
@@ -218,7 +219,7 @@ public class Profile implements ProfileModel {
         private String lastName;
         private String idcard;
         private String oldIdcard;
-        private String phone;
+        private List<String> phone;
         private String email;
         private String gender;
         private String dob;

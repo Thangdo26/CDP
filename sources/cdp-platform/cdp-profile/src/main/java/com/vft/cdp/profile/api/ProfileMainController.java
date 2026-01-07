@@ -366,15 +366,6 @@ public class ProfileMainController {
     // ═══════════════════════════════════════════════════════════════
 
     private String extractProfileId(ProfileDTO profile) {
-        // Ưu tiên lấy từ idcard
-        if (profile.getTraits() != null && profile.getTraits().getIdcard() != null) {
-            String idcard = profile.getTraits().getIdcard();
-            if (!idcard.isBlank()) {
-                return idcard;  // ✅ RAW idcard
-            }
-        }
-
-        // Fallback về userId (có thể là uuid:xxx)
         return profile.getUserId();
     }
 

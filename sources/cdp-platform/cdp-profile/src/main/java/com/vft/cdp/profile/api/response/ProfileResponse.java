@@ -195,7 +195,7 @@ public class ProfileResponse {
         @JsonProperty("old_idcard")
         private String oldIdcard;
 
-        private String phone;
+        private List <String> phone;
 
         private String email;
 
